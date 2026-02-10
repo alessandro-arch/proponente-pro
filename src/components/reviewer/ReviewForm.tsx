@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, Send, AlertTriangle, FileText, Eye, Lock } from "lucide-react";
+import AiReviewAssistant from "./AiReviewAssistant";
 
 interface Assignment {
   id: string;
@@ -401,7 +402,26 @@ const ReviewForm = ({ assignment, onBack }: { assignment: Assignment; onBack: ()
 
         {/* Submit */}
         {!isReadOnly && (
-          <div className="flex justify-end pb-8">
+          <div className="flex items-center justify-between pb-8">
+            <AiReviewAssistant
+              scores={scores.map((s) => {
+                const c = criteria.find((cr) => cr.id === s.criteria_id);
+                return {
+                  criteriaName: c?.name || "",
+                  criteriaDescription: c?.description || null,
+                  maxScore: c?.max_score || 10,
+                  weight: c?.weight || 1,
+                  score: s.score,
+                  comment: s.comment,
+                };
+              })}
+              recommendation={recommendation}
+              overallScore={parseFloat(calculateWeightedScore())}
+              knowledgeArea={anonymizedData?.knowledge_area || assignment.knowledge_area}
+              editalTitle={assignment.edital_title}
+              proposalContent={proposalContent}
+              onInsert={(text) => setComments((prev) => (prev ? prev + "\n\n" + text : text))}
+            />
             <Button onClick={handleSubmit} size="lg" disabled={submitting}>
               {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
               Enviar Avaliação
