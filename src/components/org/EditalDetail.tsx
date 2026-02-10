@@ -7,11 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, Send, Lock, Plus, FileText, Settings, Inbox } from "lucide-react";
+import { Loader2, ArrowLeft, Send, Lock, Plus, FileText, Settings, Inbox, ClipboardCheck, BarChart3 } from "lucide-react";
 import FormKnowledgeAreas from "@/components/org/FormKnowledgeAreas";
 import FormSectionBuilder from "@/components/org/FormSectionBuilder";
 import FormPreview from "@/components/org/FormPreview";
 import SubmissionsList from "@/components/org/SubmissionsList";
+import ReviewManagement from "@/components/org/ReviewManagement";
+import ScoringCriteriaManager from "@/components/org/ScoringCriteriaManager";
+import IdentityReveal from "@/components/org/IdentityReveal";
 
 interface Edital {
   id: string;
@@ -135,7 +138,12 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
           <TabsTrigger value="submissions">
             <Inbox className="w-4 h-4 mr-1" /> Submissões
           </TabsTrigger>
-          <TabsTrigger value="settings">Configurações</TabsTrigger>
+          <TabsTrigger value="reviews">
+            <ClipboardCheck className="w-4 h-4 mr-1" /> Avaliação
+          </TabsTrigger>
+          <TabsTrigger value="settings">
+            <Settings className="w-4 h-4 mr-1" /> Configurações
+          </TabsTrigger>
         </TabsList>
 
         {/* Visão Geral */}
@@ -223,21 +231,25 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
 
         {/* Submissões */}
         <TabsContent value="submissions">
-          <SubmissionsList editalId={edital.id} editalTitle={edital.title} />
+          <SubmissionsList editalId={edital.id} editalTitle={edital.title} orgId={orgId} />
+        </TabsContent>
+
+        {/* Avaliação */}
+        <TabsContent value="reviews">
+          <ReviewManagement editalId={edital.id} editalTitle={edital.title} />
         </TabsContent>
 
         {/* Configurações */}
         <TabsContent value="settings">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Settings className="w-5 h-5" /> Configurações
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">Configurações avançadas serão implementadas na próxima iteração.</p>
-            </CardContent>
-          </Card>
+          <div className="space-y-6">
+            <ScoringCriteriaManager editalId={edital.id} />
+            <IdentityReveal
+              editalId={edital.id}
+              editalTitle={edital.title}
+              editalStatus={status}
+              proposals={[]}
+            />
+          </div>
         </TabsContent>
       </Tabs>
     </div>
