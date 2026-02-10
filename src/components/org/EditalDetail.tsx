@@ -8,13 +8,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, Save, Send, Lock, Plus, Trash2, GripVertical, ShieldCheck, Settings } from "lucide-react";
-import ReviewManagement from "@/components/org/ReviewManagement";
-import IdentityReveal from "@/components/org/IdentityReveal";
-import EditalFormBuilder from "@/components/org/EditalFormBuilder";
+import { Loader2, ArrowLeft, Save, Send, Lock, Plus, FileText, Settings } from "lucide-react";
 
 interface Edital {
   id: string;
@@ -29,330 +25,297 @@ interface Edital {
   blind_review_enabled: boolean;
 }
 
-interface Criteria {
-  id?: string;
-  name: string;
-  description: string;
-  weight: number;
-  max_score: number;
-  sort_order: number;
+interface FormSchema {
+  id: string;
+  edital_id: string;
+  version: number;
+  schema_json: any;
+  is_active: boolean;
+  created_at: string;
 }
 
 const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string; onBack: () => void }) => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [title, setTitle] = useState(edital.title);
-  const [description, setDescription] = useState(edital.description || "");
-  const [startDate, setStartDate] = useState(edital.start_date || "");
-  const [endDate, setEndDate] = useState(edital.end_date || "");
-  const [reviewDeadline, setReviewDeadline] = useState(edital.review_deadline || "");
-  const [minReviewers, setMinReviewers] = useState(edital.min_reviewers_per_proposal || 3);
-  const [blindReview, setBlindReview] = useState(edital.blind_review_enabled);
   const [status, setStatus] = useState(edital.status);
-  const [saving, setSaving] = useState(false);
 
-  // Proposals
-  const [proposals, setProposals] = useState<any[]>([]);
-  const [loadingProposals, setLoadingProposals] = useState(true);
+  // Form schema state
+  const [formSchema, setFormSchema] = useState<FormSchema | null>(null);
+  const [loadingForm, setLoadingForm] = useState(true);
+  const [creatingForm, setCreatingForm] = useState(false);
 
-  // Barema
-  const [criteriaList, setCriteriaList] = useState<Criteria[]>([]);
-  const [loadingCriteria, setLoadingCriteria] = useState(true);
+  // JSON editor state
+  const [editing, setEditing] = useState(false);
+  const [jsonText, setJsonText] = useState("");
+  const [jsonError, setJsonError] = useState<string | null>(null);
+  const [savingJson, setSavingJson] = useState(false);
 
   useEffect(() => {
-    const loadAll = async () => {
-      // Load proposals
-      setLoadingProposals(true);
-      const { data: propData } = await supabase
-        .from("proposals")
-        .select("id, status, created_at, submitted_at, blind_code, knowledge_areas(name)")
-        .eq("edital_id", edital.id)
-        .order("created_at", { ascending: false });
-      setProposals(propData || []);
-      setLoadingProposals(false);
-
-      // Load criteria
-      setLoadingCriteria(true);
-      const { data: critData } = await supabase
-        .from("scoring_criteria")
-        .select("*")
-        .eq("edital_id", edital.id)
-        .order("sort_order");
-      setCriteriaList((critData || []).map((c: any) => ({
-        id: c.id,
-        name: c.name,
-        description: c.description || "",
-        weight: Number(c.weight),
-        max_score: Number(c.max_score),
-        sort_order: c.sort_order,
-      })));
-      setLoadingCriteria(false);
-    };
-    loadAll();
+    loadFormSchema();
   }, [edital.id]);
 
-  const handleSaveDetails = async () => {
-    setSaving(true);
-    const { error } = await supabase.from("editais").update({
-      title,
-      description: description || null,
-      start_date: startDate || null,
-      end_date: endDate || null,
-      review_deadline: reviewDeadline || null,
-      min_reviewers_per_proposal: minReviewers,
-      blind_review_enabled: blindReview,
-    }).eq("id", edital.id);
-    setSaving(false);
-    if (error) toast({ title: "Erro", description: error.message, variant: "destructive" });
-    else toast({ title: "Edital atualizado!" });
+  const loadFormSchema = async () => {
+    setLoadingForm(true);
+    const { data } = await supabase
+      .from("edital_form_schemas")
+      .select("*")
+      .eq("edital_id", edital.id)
+      .eq("is_active", true)
+      .maybeSingle();
+    setFormSchema(data as FormSchema | null);
+    setLoadingForm(false);
+  };
+
+  const handleCreateForm = async () => {
+    if (!user) return;
+    setCreatingForm(true);
+    const { data, error } = await supabase
+      .from("edital_form_schemas")
+      .insert({
+        edital_id: edital.id,
+        version: 1,
+        schema_json: {},
+        is_active: true,
+      })
+      .select()
+      .single();
+    setCreatingForm(false);
+    if (error) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    } else {
+      setFormSchema(data as FormSchema);
+      toast({ title: "Formulário criado!" });
+    }
+  };
+
+  const handleOpenEditor = () => {
+    if (!formSchema) return;
+    setJsonText(JSON.stringify(formSchema.schema_json, null, 2));
+    setJsonError(null);
+    setEditing(true);
+  };
+
+  const handleJsonChange = (value: string) => {
+    setJsonText(value);
+    try {
+      JSON.parse(value);
+      setJsonError(null);
+    } catch (e: any) {
+      setJsonError(e.message);
+    }
+  };
+
+  const handleSaveJson = async () => {
+    if (!formSchema) return;
+    try {
+      const parsed = JSON.parse(jsonText);
+      setSavingJson(true);
+      const { error } = await supabase
+        .from("edital_form_schemas")
+        .update({ schema_json: parsed })
+        .eq("id", formSchema.id);
+      setSavingJson(false);
+      if (error) {
+        toast({ title: "Erro", description: error.message, variant: "destructive" });
+      } else {
+        setFormSchema({ ...formSchema, schema_json: parsed });
+        setEditing(false);
+        toast({ title: "Formulário salvo!" });
+      }
+    } catch {
+      setJsonError("JSON inválido");
+    }
   };
 
   const handleStatusChange = async (newStatus: string) => {
-    const { error } = await supabase.from("editais").update({ status: newStatus as "draft" | "published" | "closed" }).eq("id", edital.id);
-    if (error) toast({ title: "Erro", description: error.message, variant: "destructive" });
-    else { setStatus(newStatus); toast({ title: `Edital ${newStatus === "published" ? "publicado" : newStatus === "closed" ? "encerrado" : "revertido"}!` }); }
-  };
-
-  // Criteria
-  const addCriteria = () => {
-    setCriteriaList((prev) => [...prev, { name: "", description: "", weight: 1, max_score: 10, sort_order: prev.length }]);
-  };
-
-  const updateCriteria = (index: number, field: Partial<Criteria>) => {
-    setCriteriaList((prev) => prev.map((c, i) => i === index ? { ...c, ...field } : c));
-  };
-
-  const removeCriteria = (index: number) => setCriteriaList((prev) => prev.filter((_, i) => i !== index));
-
-  const saveCriteria = async () => {
-    setSaving(true);
-    await supabase.from("scoring_criteria").delete().eq("edital_id", edital.id);
-    if (criteriaList.length > 0) {
-      const rows = criteriaList.map((c, i) => ({
-        edital_id: edital.id,
-        name: c.name,
-        description: c.description || null,
-        weight: c.weight,
-        max_score: c.max_score,
-        sort_order: i,
-      }));
-      await supabase.from("scoring_criteria").insert(rows);
+    const { error } = await supabase
+      .from("editais")
+      .update({ status: newStatus as "draft" | "published" | "closed" })
+      .eq("id", edital.id);
+    if (error) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    } else {
+      setStatus(newStatus);
+      toast({ title: `Edital ${newStatus === "published" ? "publicado" : newStatus === "closed" ? "encerrado" : "revertido"}!` });
     }
-    setSaving(false);
-    toast({ title: "Barema salvo!" });
   };
 
-  const proposalStatusBadge = (s: string) => {
+  const statusLabel = (s: string) => {
     switch (s) {
-      case "draft": return <Badge variant="outline">Rascunho</Badge>;
-      case "submitted": return <Badge className="bg-primary/10 text-primary border-primary/20">Submetida</Badge>;
-      case "under_review": return <Badge variant="secondary">Em avaliação</Badge>;
-      case "accepted": return <Badge className="bg-primary/10 text-primary border-primary/20">Aceita</Badge>;
-      case "rejected": return <Badge variant="destructive">Rejeitada</Badge>;
-      default: return <Badge variant="outline">{s}</Badge>;
+      case "draft": return "Rascunho";
+      case "published": return "Publicado";
+      case "closed": return "Encerrado";
+      default: return s;
     }
   };
 
   return (
     <div>
+      {/* Header */}
       <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="sm" onClick={onBack}><ArrowLeft className="w-4 h-4 mr-1" /> Voltar</Button>
+        <Button variant="ghost" size="sm" onClick={onBack}>
+          <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
+        </Button>
         <div className="flex-1">
           <h2 className="text-xl font-bold font-heading text-foreground">{edital.title}</h2>
           <div className="flex items-center gap-2 mt-1">
             <Badge variant={status === "published" ? "default" : "outline"}>
-              {status === "draft" ? "Rascunho" : status === "published" ? "Publicado" : "Encerrado"}
+              {statusLabel(status)}
             </Badge>
           </div>
         </div>
         <div className="flex gap-2">
-          {status === "draft" && <Button size="sm" onClick={() => handleStatusChange("published")}><Send className="w-4 h-4 mr-1" /> Publicar</Button>}
-          {status === "published" && <Button size="sm" variant="secondary" onClick={() => handleStatusChange("closed")}><Lock className="w-4 h-4 mr-1" /> Encerrar</Button>}
+          {status === "draft" && (
+            <Button size="sm" onClick={() => handleStatusChange("published")}>
+              <Send className="w-4 h-4 mr-1" /> Publicar
+            </Button>
+          )}
+          {status === "published" && (
+            <Button size="sm" variant="secondary" onClick={() => handleStatusChange("closed")}>
+              <Lock className="w-4 h-4 mr-1" /> Encerrar
+            </Button>
+          )}
         </div>
       </div>
 
+      {/* Tabs */}
       <Tabs defaultValue="overview">
         <TabsList className="mb-6">
           <TabsTrigger value="overview">Visão Geral</TabsTrigger>
           <TabsTrigger value="form">Formulário</TabsTrigger>
-          <TabsTrigger value="barema">Critérios e Barema</TabsTrigger>
-          <TabsTrigger value="reviews">Avaliação</TabsTrigger>
-          <TabsTrigger value="proposals">Relatórios</TabsTrigger>
           <TabsTrigger value="settings">Configurações</TabsTrigger>
         </TabsList>
 
-        {/* Visão Geral */}
+        {/* Visão Geral - read-only */}
         <TabsContent value="overview">
           <Card>
-            <CardContent className="p-6 space-y-4">
+            <CardHeader>
+              <CardTitle className="text-lg">Resumo do Edital</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <div>
-                <Label>Título</Label>
-                <Input value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1" />
+                <Label className="text-xs text-muted-foreground">Título</Label>
+                <p className="text-foreground font-medium">{edital.title}</p>
               </div>
-              <div>
-                <Label>Descrição</Label>
-                <Textarea value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1" rows={4} />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+              {edital.description && (
                 <div>
-                  <Label>Data de início</Label>
-                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="mt-1" />
-                </div>
-                <div>
-                  <Label>Data de fim</Label>
-                  <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="mt-1" />
-                </div>
-              </div>
-              <div className="flex justify-end">
-                <Button onClick={handleSaveDetails} disabled={saving}>
-                  {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                  <Save className="w-4 h-4 mr-2" /> Salvar
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Proposals summary */}
-          <Card className="mt-6">
-            <CardHeader><CardTitle className="text-lg">Propostas</CardTitle></CardHeader>
-            <CardContent>
-              {loadingProposals ? <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" /> : proposals.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhuma proposta recebida.</p>
-              ) : (
-                <div className="space-y-2">
-                  {proposals.map((p: any) => (
-                    <div key={p.id} className="flex items-center justify-between p-3 rounded-lg border border-border">
-                      <div className="flex items-center gap-2">
-                        <ShieldCheck className="w-4 h-4 text-muted-foreground" />
-                        <span className="font-mono text-sm font-bold text-primary">{p.blind_code || p.id.slice(0, 8)}</span>
-                        {p.knowledge_areas?.name && <span className="text-xs text-muted-foreground ml-2">{p.knowledge_areas.name}</span>}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {proposalStatusBadge(p.status)}
-                        <span className="text-xs text-muted-foreground">
-                          {p.submitted_at ? new Date(p.submitted_at).toLocaleDateString("pt-BR") : new Date(p.created_at).toLocaleDateString("pt-BR")}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                  <Label className="text-xs text-muted-foreground">Descrição</Label>
+                  <p className="text-foreground">{edital.description}</p>
                 </div>
               )}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Data de criação</Label>
+                  <p className="text-foreground">{new Date(edital.created_at).toLocaleDateString("pt-BR")}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Status</Label>
+                  <p className="text-foreground">{statusLabel(status)}</p>
+                </div>
+                {edital.start_date && (
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Início</Label>
+                    <p className="text-foreground">{new Date(edital.start_date).toLocaleDateString("pt-BR")}</p>
+                  </div>
+                )}
+                {edital.end_date && (
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Fim</Label>
+                    <p className="text-foreground">{new Date(edital.end_date).toLocaleDateString("pt-BR")}</p>
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Formulário */}
         <TabsContent value="form">
-          <EditalFormBuilder editalId={edital.id} orgId={orgId} />
-        </TabsContent>
-
-        {/* Critérios e Barema */}
-        <TabsContent value="barema">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Barema de Avaliação</CardTitle>
-                <Button size="sm" variant="outline" onClick={addCriteria}><Plus className="w-4 h-4 mr-1" /> Critério</Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {loadingCriteria ? <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" /> : criteriaList.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum critério configurado.</p>
-              ) : (
-                criteriaList.map((c, i) => (
-                  <div key={i} className="p-4 rounded-lg border border-border bg-muted/30 space-y-3">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div>
-                        <Label className="text-xs">Critério</Label>
-                        <Input value={c.name} onChange={(e) => updateCriteria(i, { name: e.target.value })} placeholder="Ex: Mérito técnico" className="mt-1" />
-                      </div>
-                      <div>
-                        <Label className="text-xs">Descrição</Label>
-                        <Input value={c.description} onChange={(e) => updateCriteria(i, { description: e.target.value })} placeholder="Descrição do critério" className="mt-1" />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <Label className="text-xs">Peso</Label>
-                        <Input type="number" value={c.weight} onChange={(e) => updateCriteria(i, { weight: Number(e.target.value) })} min={0.1} step={0.1} className="mt-1" />
-                      </div>
-                      <div>
-                        <Label className="text-xs">Nota máxima</Label>
-                        <Input type="number" value={c.max_score} onChange={(e) => updateCriteria(i, { max_score: Number(e.target.value) })} min={1} className="mt-1" />
-                      </div>
-                      <div className="flex items-end">
-                        <Button size="sm" variant="ghost" onClick={() => removeCriteria(i)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-              {criteriaList.length > 0 && (
-                <div className="flex justify-end">
-                  <Button onClick={saveCriteria} disabled={saving}>
-                    {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                    <Save className="w-4 h-4 mr-2" /> Salvar Barema
+          {loadingForm ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          ) : !formSchema ? (
+            /* Empty state - no form yet */
+            <Card>
+              <CardContent className="py-12 text-center">
+                <FileText className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground mb-4">Nenhum formulário criado para este edital.</p>
+                <Button onClick={handleCreateForm} disabled={creatingForm}>
+                  {creatingForm && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                  <Plus className="w-4 h-4 mr-2" /> Criar Formulário
+                </Button>
+              </CardContent>
+            </Card>
+          ) : editing ? (
+            /* JSON Editor */
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Editor de Formulário (MVP)</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label>schema_json</Label>
+                  <Textarea
+                    value={jsonText}
+                    onChange={(e) => handleJsonChange(e.target.value)}
+                    className="mt-1 font-mono text-sm min-h-[300px]"
+                    placeholder='{"fields": []}'
+                  />
+                  {jsonError && (
+                    <p className="text-sm text-destructive mt-1">{jsonError}</p>
+                  )}
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setEditing(false)}>Cancelar</Button>
+                  <Button onClick={handleSaveJson} disabled={savingJson || !!jsonError}>
+                    {savingJson && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                    <Save className="w-4 h-4 mr-2" /> Salvar
                   </Button>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          ) : (
+            /* Form exists - show summary */
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">Formulário</CardTitle>
+                  <Badge variant="outline">draft</Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Versão</Label>
+                    <p className="text-foreground">{formSchema.version}</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Última atualização</Label>
+                    <p className="text-foreground">{new Date(formSchema.created_at).toLocaleDateString("pt-BR")}</p>
+                  </div>
+                </div>
+                <Separator />
+                <div className="flex justify-end">
+                  <Button onClick={handleOpenEditor}>
+                    <FileText className="w-4 h-4 mr-2" /> Editar Formulário
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
-        {/* Avaliação */}
-        <TabsContent value="reviews">
-          <ReviewManagement editalId={edital.id} editalTitle={edital.title} />
-          <Separator className="my-6" />
-          <IdentityReveal
-            editalId={edital.id}
-            editalTitle={edital.title}
-            editalStatus={status}
-            proposals={proposals.map((p: any) => ({
-              id: p.id,
-              blind_code: p.blind_code || p.id.slice(0, 8),
-              status: p.status,
-            }))}
-          />
-        </TabsContent>
-
-        {/* Relatórios (Proposals) */}
-        <TabsContent value="proposals">
-          <Card>
-            <CardHeader><CardTitle className="text-lg">Relatórios</CardTitle></CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">Relatórios detalhados serão implementados na próxima iteração.</p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Configurações */}
+        {/* Configurações - placeholder */}
         <TabsContent value="settings">
           <Card>
-            <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Settings className="w-5 h-5" /> Configurações do Edital</CardTitle></CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Prazo de avaliação</Label>
-                  <Input type="date" value={reviewDeadline} onChange={(e) => setReviewDeadline(e.target.value)} className="mt-1" />
-                </div>
-                <div>
-                  <Label>Mín. avaliadores por proposta</Label>
-                  <Input type="number" value={minReviewers} onChange={(e) => setMinReviewers(Number(e.target.value))} min={1} max={10} className="mt-1" />
-                </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Avaliação cega (blind review)</Label>
-                  <p className="text-xs text-muted-foreground">Ocultar identidade dos proponentes para avaliadores</p>
-                </div>
-                <input type="checkbox" checked={blindReview} onChange={(e) => setBlindReview(e.target.checked)} className="rounded" />
-              </div>
-              <div className="flex justify-end">
-                <Button onClick={handleSaveDetails} disabled={saving}>
-                  {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                  <Save className="w-4 h-4 mr-2" /> Salvar Configurações
-                </Button>
-              </div>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Settings className="w-5 h-5" /> Configurações
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">Configurações avançadas serão implementadas na próxima iteração.</p>
             </CardContent>
           </Card>
         </TabsContent>
