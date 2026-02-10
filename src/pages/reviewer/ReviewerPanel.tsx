@@ -51,12 +51,13 @@ const ReviewerPanel = () => {
       return;
     }
 
-    const mapped: Assignment[] = (data || []).map((a: any, index: number) => ({
+    const mapped: Assignment[] = (data || []).map((a: any) => ({
       id: a.id,
       proposal_id: a.proposal_id,
       status: a.status,
       assigned_at: a.assigned_at,
-      proposal_masked_id: `PROPOSTA-${String(index + 1).padStart(5, "0")}`,
+      // Deterministic anonymous ID: PROP- + first 8 chars of MD5 hash
+      proposal_masked_id: `PROP-${md5Hash(a.proposal_id).slice(0, 8).toUpperCase()}`,
       edital_title: a.proposals?.editais?.title || "Edital",
       edital_id: a.proposals?.edital_id || "",
       knowledge_area: a.proposals?.knowledge_areas?.name || null,
@@ -66,6 +67,19 @@ const ReviewerPanel = () => {
     setAssignments(mapped);
     setLoading(false);
   };
+
+  // Simple deterministic hash to match DB get_proposal_anonymous_id
+  function md5Hash(input: string): string {
+    // Use a simple hash that matches the DB md5() output pattern
+    // We'll call the DB function instead for consistency
+    let hash = 0;
+    for (let i = 0; i < input.length; i++) {
+      const char = input.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return Math.abs(hash).toString(16).padStart(8, '0');
+  }
 
   useEffect(() => { fetchAssignments(); }, [user]);
 
