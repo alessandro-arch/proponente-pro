@@ -209,6 +209,15 @@ const SubmissionForm = ({ editalId, editalTitle, editalEndDate, onBack }: Submis
     await supabase.from("edital_submission_drafts").delete()
       .eq("edital_id", editalId).eq("user_id", user.id);
 
+    // Send email notification (fire and forget)
+    supabase.functions.invoke("send-submission-notification", {
+      body: {
+        submissionId: sub.id,
+        protocol,
+        editalTitle,
+      },
+    }).catch(err => console.warn("Email notification failed:", err));
+
     setSubmission(sub);
     setIsSubmitted(true);
     setConfirmOpen(false);
