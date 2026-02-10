@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 import { FileText, ArrowLeft, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -12,27 +12,13 @@ const Register = () => {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [selectedOrg, setSelectedOrg] = useState("");
-  const [organizations, setOrganizations] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  useEffect(() => {
-    const fetchOrgs = async () => {
-      const { data } = await supabase
-        .from("organizations")
-        .select("id, name")
-        .eq("is_active", true)
-        .order("name");
-      if (data) setOrganizations(data);
-    };
-    fetchOrgs();
-  }, []);
-
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName.trim() || !email.trim() || !password.trim() || !selectedOrg) {
+    if (!fullName.trim() || !email.trim() || !password.trim()) {
       toast({ title: "Preencha todos os campos", variant: "destructive" });
       return;
     }
@@ -46,7 +32,7 @@ const Register = () => {
       email: email.trim(),
       password,
       options: {
-        data: { full_name: fullName.trim(), organization_id: selectedOrg },
+        data: { full_name: fullName.trim() },
         emailRedirectTo: window.location.origin,
       },
     });
@@ -55,15 +41,6 @@ const Register = () => {
     if (error) {
       toast({ title: "Erro no cadastro", description: error.message, variant: "destructive" });
       return;
-    }
-
-    // Add user as proponente to selected org
-    if (signUpData.user) {
-      await supabase.from("organization_members").insert({
-        organization_id: selectedOrg,
-        user_id: signUpData.user.id,
-        role: "proponente" as any,
-      });
     }
 
     toast({
@@ -124,21 +101,6 @@ const Register = () => {
                   minLength={6}
                   className="mt-1"
                 />
-              </div>
-              <div>
-                <Label htmlFor="org">Organização</Label>
-                <Select value={selectedOrg} onValueChange={setSelectedOrg}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Selecione a organização" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {organizations.map((org) => (
-                      <SelectItem key={org.id} value={org.id}>
-                        {org.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
               <Button type="submit" className="w-full" size="lg" disabled={loading}>
                 {loading && <Loader2 className="w-4 h-4 animate-spin" />}
