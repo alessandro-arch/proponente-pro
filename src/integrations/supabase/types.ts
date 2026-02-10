@@ -206,6 +206,107 @@ export type Database = {
           },
         ]
       }
+      edital_forms: {
+        Row: {
+          created_at: string
+          edital_id: string
+          id: string
+          knowledge_area_mode: string
+          knowledge_area_required: boolean
+          organization_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          edital_id: string
+          id?: string
+          knowledge_area_mode?: string
+          knowledge_area_required?: boolean
+          organization_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          edital_id?: string
+          id?: string
+          knowledge_area_mode?: string
+          knowledge_area_required?: boolean
+          organization_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "edital_forms_edital_id_fkey"
+            columns: ["edital_id"]
+            isOneToOne: true
+            referencedRelation: "editais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "edital_forms_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      form_questions: {
+        Row: {
+          created_at: string
+          form_id: string
+          help_text: string | null
+          id: string
+          is_required: boolean
+          label: string
+          options: Json | null
+          section: string
+          sort_order: number
+          type: string
+          updated_at: string
+          validation_rules: Json | null
+        }
+        Insert: {
+          created_at?: string
+          form_id: string
+          help_text?: string | null
+          id?: string
+          is_required?: boolean
+          label: string
+          options?: Json | null
+          section?: string
+          sort_order?: number
+          type?: string
+          updated_at?: string
+          validation_rules?: Json | null
+        }
+        Update: {
+          created_at?: string
+          form_id?: string
+          help_text?: string | null
+          id?: string
+          is_required?: boolean
+          label?: string
+          options?: Json | null
+          section?: string
+          sort_order?: number
+          type?: string
+          updated_at?: string
+          validation_rules?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "form_questions_form_id_fkey"
+            columns: ["form_id"]
+            isOneToOne: false
+            referencedRelation: "edital_forms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       identity_reveals: {
         Row: {
           edital_id: string
@@ -257,27 +358,52 @@ export type Database = {
       }
       knowledge_areas: {
         Row: {
+          code: string | null
           created_at: string
+          edital_id: string | null
           id: string
+          is_active: boolean
+          level: number
           name: string
           organization_id: string
           parent_id: string | null
+          sort_order: number
+          updated_at: string
         }
         Insert: {
+          code?: string | null
           created_at?: string
+          edital_id?: string | null
           id?: string
+          is_active?: boolean
+          level?: number
           name: string
           organization_id: string
           parent_id?: string | null
+          sort_order?: number
+          updated_at?: string
         }
         Update: {
+          code?: string | null
           created_at?: string
+          edital_id?: string | null
           id?: string
+          is_active?: boolean
+          level?: number
           name?: string
           organization_id?: string
           parent_id?: string | null
+          sort_order?: number
+          updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "knowledge_areas_edital_id_fkey"
+            columns: ["edital_id"]
+            isOneToOne: false
+            referencedRelation: "editais"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "knowledge_areas_organization_id_fkey"
             columns: ["organization_id"]

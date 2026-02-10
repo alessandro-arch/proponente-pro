@@ -2,16 +2,14 @@ import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Navigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Loader2, FileText, LogOut, UserCircle, LayoutDashboard, ScrollText, FolderTree, Users, Shield } from "lucide-react";
+import { Loader2, FileText, LogOut, UserCircle, LayoutDashboard, ScrollText, Users, Shield } from "lucide-react";
 import OrgDashboard from "@/components/org/OrgDashboard";
 import EditaisList from "@/components/org/EditaisList";
-import KnowledgeAreas from "@/components/org/KnowledgeAreas";
 import AuditLogViewer from "@/components/org/AuditLogViewer";
 
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "editais", label: "Editais", icon: ScrollText },
-  { key: "areas", label: "Áreas do Conhecimento", icon: FolderTree },
   { key: "members", label: "Membros", icon: Users },
   { key: "audit", label: "Auditoria", icon: Shield },
 ] as const;
@@ -82,7 +80,6 @@ const OrgPanel = () => {
         <div className="p-8">
           {activeNav === "dashboard" && <OrgDashboard orgId={orgId} />}
           {activeNav === "editais" && <EditaisList orgId={orgId} />}
-          {activeNav === "areas" && <KnowledgeAreas orgId={orgId} />}
           {activeNav === "members" && (
             <div className="text-center py-12">
               <Users className="w-12 h-12 mx-auto text-muted-foreground mb-4" />

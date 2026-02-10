@@ -21,6 +21,9 @@ interface Edital {
   start_date: string | null;
   end_date: string | null;
   created_at: string;
+  review_deadline: string | null;
+  min_reviewers_per_proposal: number | null;
+  blind_review_enabled: boolean;
 }
 
 const EditaisList = ({ orgId }: { orgId: string }) => {
