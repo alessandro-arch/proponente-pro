@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
-type AppRole = "icca_admin" | "org_admin" | "edital_manager" | "proponente";
+type AppRole = "icca_admin" | "org_admin" | "edital_manager" | "proponente" | "reviewer";
 
 interface UserMembership {
   organization_id: string;

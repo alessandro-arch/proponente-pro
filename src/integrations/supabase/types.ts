@@ -62,7 +62,9 @@ export type Database = {
           description: string | null
           end_date: string | null
           id: string
+          min_reviewers_per_proposal: number | null
           organization_id: string
+          review_deadline: string | null
           start_date: string | null
           status: Database["public"]["Enums"]["edital_status"]
           title: string
@@ -74,7 +76,9 @@ export type Database = {
           description?: string | null
           end_date?: string | null
           id?: string
+          min_reviewers_per_proposal?: number | null
           organization_id: string
+          review_deadline?: string | null
           start_date?: string | null
           status?: Database["public"]["Enums"]["edital_status"]
           title: string
@@ -86,7 +90,9 @@ export type Database = {
           description?: string | null
           end_date?: string | null
           id?: string
+          min_reviewers_per_proposal?: number | null
           organization_id?: string
+          review_deadline?: string | null
           start_date?: string | null
           status?: Database["public"]["Enums"]["edital_status"]
           title?: string
@@ -393,6 +399,41 @@ export type Database = {
           },
         ]
       }
+      proposal_decisions: {
+        Row: {
+          decided_at: string
+          decided_by: string
+          decision: string
+          id: string
+          justification: string | null
+          proposal_id: string
+        }
+        Insert: {
+          decided_at?: string
+          decided_by: string
+          decision: string
+          id?: string
+          justification?: string | null
+          proposal_id: string
+        }
+        Update: {
+          decided_at?: string
+          decided_by?: string
+          decision?: string
+          id?: string
+          justification?: string | null
+          proposal_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "proposal_decisions_proposal_id_fkey"
+            columns: ["proposal_id"]
+            isOneToOne: true
+            referencedRelation: "proposals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       proposal_files: {
         Row: {
           file_path: string
@@ -480,6 +521,175 @@ export type Database = {
           },
         ]
       }
+      review_assignments: {
+        Row: {
+          assigned_at: string
+          assigned_by: string
+          id: string
+          proposal_id: string
+          reviewer_user_id: string
+          status: string
+          submitted_at: string | null
+        }
+        Insert: {
+          assigned_at?: string
+          assigned_by: string
+          id?: string
+          proposal_id: string
+          reviewer_user_id: string
+          status?: string
+          submitted_at?: string | null
+        }
+        Update: {
+          assigned_at?: string
+          assigned_by?: string
+          id?: string
+          proposal_id?: string
+          reviewer_user_id?: string
+          status?: string
+          submitted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "review_assignments_proposal_id_fkey"
+            columns: ["proposal_id"]
+            isOneToOne: false
+            referencedRelation: "proposals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      review_scores: {
+        Row: {
+          comment: string | null
+          criteria_id: string
+          id: string
+          review_id: string
+          score: number
+        }
+        Insert: {
+          comment?: string | null
+          criteria_id: string
+          id?: string
+          review_id: string
+          score: number
+        }
+        Update: {
+          comment?: string | null
+          criteria_id?: string
+          id?: string
+          review_id?: string
+          score?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "review_scores_criteria_id_fkey"
+            columns: ["criteria_id"]
+            isOneToOne: false
+            referencedRelation: "scoring_criteria"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "review_scores_review_id_fkey"
+            columns: ["review_id"]
+            isOneToOne: false
+            referencedRelation: "reviews"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reviews: {
+        Row: {
+          assignment_id: string
+          comments_to_committee: string | null
+          created_at: string
+          id: string
+          overall_score: number | null
+          proposal_id: string
+          recommendation: string | null
+          reviewer_user_id: string
+          submitted_at: string | null
+        }
+        Insert: {
+          assignment_id: string
+          comments_to_committee?: string | null
+          created_at?: string
+          id?: string
+          overall_score?: number | null
+          proposal_id: string
+          recommendation?: string | null
+          reviewer_user_id: string
+          submitted_at?: string | null
+        }
+        Update: {
+          assignment_id?: string
+          comments_to_committee?: string | null
+          created_at?: string
+          id?: string
+          overall_score?: number | null
+          proposal_id?: string
+          recommendation?: string | null
+          reviewer_user_id?: string
+          submitted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reviews_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: true
+            referencedRelation: "review_assignments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reviews_proposal_id_fkey"
+            columns: ["proposal_id"]
+            isOneToOne: false
+            referencedRelation: "proposals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scoring_criteria: {
+        Row: {
+          created_at: string
+          description: string | null
+          edital_id: string
+          id: string
+          max_score: number
+          name: string
+          sort_order: number
+          weight: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          edital_id: string
+          id?: string
+          max_score?: number
+          name: string
+          sort_order?: number
+          weight?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          edital_id?: string
+          id?: string
+          max_score?: number
+          name?: string
+          sort_order?: number
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scoring_criteria_edital_id_fkey"
+            columns: ["edital_id"]
+            isOneToOne: false
+            referencedRelation: "editais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -532,7 +742,12 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "icca_admin" | "org_admin" | "edital_manager" | "proponente"
+      app_role:
+        | "icca_admin"
+        | "org_admin"
+        | "edital_manager"
+        | "proponente"
+        | "reviewer"
       edital_status: "draft" | "published" | "closed"
       proposal_status:
         | "draft"
@@ -667,7 +882,13 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["icca_admin", "org_admin", "edital_manager", "proponente"],
+      app_role: [
+        "icca_admin",
+        "org_admin",
+        "edital_manager",
+        "proponente",
+        "reviewer",
+      ],
       edital_status: ["draft", "published", "closed"],
       proposal_status: [
         "draft",

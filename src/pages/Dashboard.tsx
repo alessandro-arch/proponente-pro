@@ -23,6 +23,7 @@ const Dashboard = () => {
   if (globalRole === "icca_admin") return <Navigate to="/admin" replace />;
   if (membership?.role === "org_admin" || membership?.role === "edital_manager") return <Navigate to="/org" replace />;
   if (membership?.role === "proponente") return <Navigate to="/proponente" replace />;
+  if (membership?.role === "reviewer") return <Navigate to="/reviewer" replace />;
 
   // No role assigned yet — show profile link + waiting message
   return (
