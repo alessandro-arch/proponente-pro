@@ -13,6 +13,7 @@ import AdminPanel from "./pages/admin/AdminPanel";
 import OrgPanel from "./pages/org/OrgPanel";
 import ProponentePanel from "./pages/proponente/ProponentePanel";
 import ReviewerPanel from "./pages/reviewer/ReviewerPanel";
+import FinanceiroPanel from "./pages/financeiro/FinanceiroPanel";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 
@@ -35,6 +36,7 @@ const App = () => (
             <Route path="/org/*" element={<ProtectedRoute allowedRoles={["org_admin", "edital_manager"]}><OrgPanel /></ProtectedRoute>} />
             <Route path="/proponente/*" element={<ProtectedRoute allowedRoles={["proponente"]}><ProponentePanel /></ProtectedRoute>} />
             <Route path="/reviewer/*" element={<ProtectedRoute allowedRoles={["reviewer"]}><ReviewerPanel /></ProtectedRoute>} />
+            <Route path="/financeiro/*" element={<ProtectedRoute allowedRoles={["proponente"]}><FinanceiroPanel /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

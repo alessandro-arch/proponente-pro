@@ -58,6 +58,126 @@ export type Database = {
           },
         ]
       }
+      bank_statements: {
+        Row: {
+          bank_account_id: string
+          confirmed_at: string | null
+          confirmed_by: string | null
+          extraction_confidence_score: number | null
+          file_url: string | null
+          id: string
+          needs_review: boolean
+          project_execution_id: string
+          statement_period_end: string | null
+          statement_period_start: string | null
+          uploaded_at: string
+          uploaded_by: string
+        }
+        Insert: {
+          bank_account_id: string
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          extraction_confidence_score?: number | null
+          file_url?: string | null
+          id?: string
+          needs_review?: boolean
+          project_execution_id: string
+          statement_period_end?: string | null
+          statement_period_start?: string | null
+          uploaded_at?: string
+          uploaded_by: string
+        }
+        Update: {
+          bank_account_id?: string
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          extraction_confidence_score?: number | null
+          file_url?: string | null
+          id?: string
+          needs_review?: boolean
+          project_execution_id?: string
+          statement_period_end?: string | null
+          statement_period_start?: string | null
+          uploaded_at?: string
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_statements_bank_account_id_fkey"
+            columns: ["bank_account_id"]
+            isOneToOne: false
+            referencedRelation: "project_bank_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_statements_project_execution_id_fkey"
+            columns: ["project_execution_id"]
+            isOneToOne: false
+            referencedRelation: "project_executions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bank_transactions: {
+        Row: {
+          amount: number
+          balance_after: number | null
+          bank_account_id: string
+          bank_statement_id: string
+          created_at: string
+          description_raw: string
+          direction: string
+          document_id_reference: string | null
+          id: string
+          parsed_json: Json | null
+          posting_date: string | null
+          transaction_date: string
+        }
+        Insert: {
+          amount: number
+          balance_after?: number | null
+          bank_account_id: string
+          bank_statement_id: string
+          created_at?: string
+          description_raw: string
+          direction?: string
+          document_id_reference?: string | null
+          id?: string
+          parsed_json?: Json | null
+          posting_date?: string | null
+          transaction_date: string
+        }
+        Update: {
+          amount?: number
+          balance_after?: number | null
+          bank_account_id?: string
+          bank_statement_id?: string
+          created_at?: string
+          description_raw?: string
+          direction?: string
+          document_id_reference?: string | null
+          id?: string
+          parsed_json?: Json | null
+          posting_date?: string | null
+          transaction_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_transactions_bank_account_id_fkey"
+            columns: ["bank_account_id"]
+            isOneToOne: false
+            referencedRelation: "project_bank_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_transactions_bank_statement_id_fkey"
+            columns: ["bank_statement_id"]
+            isOneToOne: false
+            referencedRelation: "bank_statements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cnpq_areas: {
         Row: {
           code: string
@@ -371,6 +491,48 @@ export type Database = {
             columns: ["form_version_id"]
             isOneToOne: false
             referencedRelation: "form_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expense_payments: {
+        Row: {
+          bank_transaction_id: string
+          created_at: string
+          expense_id: string
+          id: string
+          paid_amount: number
+          paid_date: string
+        }
+        Insert: {
+          bank_transaction_id: string
+          created_at?: string
+          expense_id: string
+          id?: string
+          paid_amount: number
+          paid_date: string
+        }
+        Update: {
+          bank_transaction_id?: string
+          created_at?: string
+          expense_id?: string
+          id?: string
+          paid_amount?: number
+          paid_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_payments_bank_transaction_id_fkey"
+            columns: ["bank_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "bank_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_payments_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "project_expenses"
             referencedColumns: ["id"]
           },
         ]
@@ -912,6 +1074,236 @@ export type Database = {
         }
         Relationships: []
       }
+      project_bank_accounts: {
+        Row: {
+          account_holder_document: string
+          account_holder_name: string
+          account_number: string
+          account_type: string
+          bank_code: string | null
+          bank_name: string
+          branch_number: string
+          created_at: string
+          id: string
+          project_execution_id: string
+          updated_at: string
+        }
+        Insert: {
+          account_holder_document: string
+          account_holder_name: string
+          account_number: string
+          account_type?: string
+          bank_code?: string | null
+          bank_name: string
+          branch_number: string
+          created_at?: string
+          id?: string
+          project_execution_id: string
+          updated_at?: string
+        }
+        Update: {
+          account_holder_document?: string
+          account_holder_name?: string
+          account_number?: string
+          account_type?: string
+          bank_code?: string | null
+          bank_name?: string
+          branch_number?: string
+          created_at?: string
+          id?: string
+          project_execution_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_bank_accounts_project_execution_id_fkey"
+            columns: ["project_execution_id"]
+            isOneToOne: false
+            referencedRelation: "project_executions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_executions: {
+        Row: {
+          created_at: string
+          created_by: string
+          edital_id: string
+          end_date: string | null
+          id: string
+          organization_id: string
+          proposal_id: string
+          start_date: string | null
+          status: string
+          title: string | null
+          total_budget: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          edital_id: string
+          end_date?: string | null
+          id?: string
+          organization_id: string
+          proposal_id: string
+          start_date?: string | null
+          status?: string
+          title?: string | null
+          total_budget?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          edital_id?: string
+          end_date?: string | null
+          id?: string
+          organization_id?: string
+          proposal_id?: string
+          start_date?: string | null
+          status?: string
+          title?: string | null
+          total_budget?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_executions_edital_id_fkey"
+            columns: ["edital_id"]
+            isOneToOne: false
+            referencedRelation: "editais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_executions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_executions_proposal_id_fkey"
+            columns: ["proposal_id"]
+            isOneToOne: false
+            referencedRelation: "proposals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_executions_proposal_id_fkey"
+            columns: ["proposal_id"]
+            isOneToOne: false
+            referencedRelation: "submissions_blind"
+            referencedColumns: ["submission_id"]
+          },
+        ]
+      }
+      project_expenses: {
+        Row: {
+          category: string | null
+          created_at: string
+          created_by: string
+          description: string
+          id: string
+          invoice_number: string | null
+          issue_date: string | null
+          notes: string | null
+          project_execution_id: string
+          status: string
+          supplier_document: string | null
+          supplier_name: string | null
+          total_value: number
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          created_by: string
+          description: string
+          id?: string
+          invoice_number?: string | null
+          issue_date?: string | null
+          notes?: string | null
+          project_execution_id: string
+          status?: string
+          supplier_document?: string | null
+          supplier_name?: string | null
+          total_value?: number
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string
+          id?: string
+          invoice_number?: string | null
+          issue_date?: string | null
+          notes?: string | null
+          project_execution_id?: string
+          status?: string
+          supplier_document?: string | null
+          supplier_name?: string | null
+          total_value?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_expenses_project_execution_id_fkey"
+            columns: ["project_execution_id"]
+            isOneToOne: false
+            referencedRelation: "project_executions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_refunds: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          description: string
+          id: string
+          project_execution_id: string
+          reason: string | null
+          refund_date: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          created_by: string
+          description: string
+          id?: string
+          project_execution_id: string
+          reason?: string | null
+          refund_date?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          description?: string
+          id?: string
+          project_execution_id?: string
+          reason?: string | null
+          refund_date?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_refunds_project_execution_id_fkey"
+            columns: ["project_execution_id"]
+            isOneToOne: false
+            referencedRelation: "project_executions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       proposal_answers: {
         Row: {
           answers_json: Json
@@ -1083,6 +1475,74 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reconciliations: {
+        Row: {
+          bank_transaction_id: string
+          decided_at: string | null
+          decided_by: string | null
+          expense_id: string | null
+          id: string
+          match_rule: string | null
+          notes: string | null
+          project_execution_id: string
+          refund_id: string | null
+          status: string
+        }
+        Insert: {
+          bank_transaction_id: string
+          decided_at?: string | null
+          decided_by?: string | null
+          expense_id?: string | null
+          id?: string
+          match_rule?: string | null
+          notes?: string | null
+          project_execution_id: string
+          refund_id?: string | null
+          status?: string
+        }
+        Update: {
+          bank_transaction_id?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          expense_id?: string | null
+          id?: string
+          match_rule?: string | null
+          notes?: string | null
+          project_execution_id?: string
+          refund_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reconciliations_bank_transaction_id_fkey"
+            columns: ["bank_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "bank_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reconciliations_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "project_expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reconciliations_project_execution_id_fkey"
+            columns: ["project_execution_id"]
+            isOneToOne: false
+            referencedRelation: "project_executions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reconciliations_refund_id_fkey"
+            columns: ["refund_id"]
+            isOneToOne: false
+            referencedRelation: "project_refunds"
             referencedColumns: ["id"]
           },
         ]
