@@ -9,6 +9,7 @@ import { Loader2, Search, Calendar, FileText, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import SubmissionForm from "@/components/proponente/SubmissionForm";
 
 interface Props {
   orgId: string;
@@ -18,6 +19,7 @@ interface Props {
 
 const EditaisAbertos = ({ orgId, userId, onStartProposal }: Props) => {
   const [search, setSearch] = useState("");
+  const [selectedEdital, setSelectedEdital] = useState<any>(null);
 
   const { data: editais, isLoading } = useQuery({
     queryKey: ["proponente-editais", orgId],
@@ -33,36 +35,47 @@ const EditaisAbertos = ({ orgId, userId, onStartProposal }: Props) => {
     },
   });
 
-  const { data: myProposals } = useQuery({
-    queryKey: ["my-proposals", userId],
+  // Check existing submissions
+  const { data: mySubmissions } = useQuery({
+    queryKey: ["my-submissions", userId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("proposals")
-        .select("edital_id, status")
-        .eq("proponente_user_id", userId);
+        .from("edital_submissions")
+        .select("edital_id, status, protocol")
+        .eq("user_id", userId);
       if (error) throw error;
       return data;
     },
   });
 
-  const proposalsByEdital = new Map(myProposals?.map((p) => [p.edital_id, p.status]) ?? []);
+  // Check existing drafts
+  const { data: myDrafts } = useQuery({
+    queryKey: ["my-submission-drafts", userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("edital_submission_drafts")
+        .select("edital_id")
+        .eq("user_id", userId);
+      if (error) throw error;
+      return data;
+    },
+  });
 
-  const handleStartProposal = async (editalId: string) => {
-    const { error } = await supabase.from("proposals").insert({
-      edital_id: editalId,
-      organization_id: orgId,
-      proponente_user_id: userId,
-      status: "draft",
-    });
-    if (error) {
-      toast.error("Erro ao iniciar proposta: " + error.message);
-      return;
-    }
-    toast.success("Rascunho criado! Acesse 'Minhas Propostas' para preencher.");
-    onStartProposal();
-  };
+  const submissionsByEdital = new Map((mySubmissions || []).map((s: any) => [s.edital_id, s]));
+  const draftEditalIds = new Set((myDrafts || []).map((d: any) => d.edital_id));
 
   const filtered = editais?.filter((e) => e.title.toLowerCase().includes(search.toLowerCase())) ?? [];
+
+  if (selectedEdital) {
+    return (
+      <SubmissionForm
+        editalId={selectedEdital.id}
+        editalTitle={selectedEdital.title}
+        editalEndDate={selectedEdital.end_date}
+        onBack={() => setSelectedEdital(null)}
+      />
+    );
+  }
 
   if (isLoading) {
     return (
@@ -92,8 +105,10 @@ const EditaisAbertos = ({ orgId, userId, onStartProposal }: Props) => {
       ) : (
         <div className="grid gap-4">
           {filtered.map((edital) => {
-            const existingStatus = proposalsByEdital.get(edital.id);
+            const existingSub = submissionsByEdital.get(edital.id);
+            const hasDraft = draftEditalIds.has(edital.id);
             const isExpired = edital.end_date && new Date(edital.end_date) < new Date();
+            const isSubmitted = existingSub && existingSub.status === "submitted";
 
             return (
               <Card key={edital.id} className="hover:shadow-card-hover transition-shadow">
@@ -105,7 +120,8 @@ const EditaisAbertos = ({ orgId, userId, onStartProposal }: Props) => {
                         <CardDescription className="mt-1 line-clamp-2">{edital.description}</CardDescription>
                       )}
                     </div>
-                    {isExpired && <Badge variant="secondary">Encerrado</Badge>}
+                    {isExpired && !isSubmitted && <Badge variant="secondary">Encerrado</Badge>}
+                    {isSubmitted && <Badge variant="default">Submetida</Badge>}
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -125,13 +141,17 @@ const EditaisAbertos = ({ orgId, userId, onStartProposal }: Props) => {
                       )}
                     </div>
 
-                    {existingStatus ? (
-                      <Badge variant={existingStatus === "submitted" ? "default" : "outline"}>
-                        {existingStatus === "draft" ? "Rascunho" : existingStatus === "submitted" ? "Enviada" : existingStatus}
-                      </Badge>
+                    {isSubmitted ? (
+                      <Button size="sm" variant="outline" onClick={() => setSelectedEdital(edital)}>
+                        Visualizar proposta
+                      </Button>
+                    ) : hasDraft ? (
+                      <Button size="sm" onClick={() => setSelectedEdital(edital)}>
+                        Continuar rascunho <ArrowRight className="w-4 h-4 ml-1" />
+                      </Button>
                     ) : !isExpired ? (
-                      <Button size="sm" onClick={() => handleStartProposal(edital.id)}>
-                        Iniciar Proposta <ArrowRight className="w-4 h-4 ml-1" />
+                      <Button size="sm" onClick={() => setSelectedEdital(edital)}>
+                        Preencher proposta <ArrowRight className="w-4 h-4 ml-1" />
                       </Button>
                     ) : null}
                   </div>

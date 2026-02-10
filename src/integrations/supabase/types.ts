@@ -254,6 +254,127 @@ export type Database = {
           },
         ]
       }
+      edital_submission_drafts: {
+        Row: {
+          answers: Json
+          created_at: string
+          edital_id: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          answers?: Json
+          created_at?: string
+          edital_id: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          answers?: Json
+          created_at?: string
+          edital_id?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "edital_submission_drafts_edital_id_fkey"
+            columns: ["edital_id"]
+            isOneToOne: false
+            referencedRelation: "editais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      edital_submission_files: {
+        Row: {
+          created_at: string
+          file_type: string
+          file_url: string
+          id: string
+          submission_id: string
+        }
+        Insert: {
+          created_at?: string
+          file_type?: string
+          file_url: string
+          id?: string
+          submission_id: string
+        }
+        Update: {
+          created_at?: string
+          file_type?: string
+          file_url?: string
+          id?: string
+          submission_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "edital_submission_files_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "edital_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      edital_submissions: {
+        Row: {
+          answers: Json
+          created_at: string
+          edital_id: string
+          form_version_id: string | null
+          id: string
+          protocol: string | null
+          status: string
+          submitted_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          answers?: Json
+          created_at?: string
+          edital_id: string
+          form_version_id?: string | null
+          id?: string
+          protocol?: string | null
+          status?: string
+          submitted_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          answers?: Json
+          created_at?: string
+          edital_id?: string
+          form_version_id?: string | null
+          id?: string
+          protocol?: string | null
+          status?: string
+          submitted_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "edital_submissions_edital_id_fkey"
+            columns: ["edital_id"]
+            isOneToOne: false
+            referencedRelation: "editais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "edital_submissions_form_version_id_fkey"
+            columns: ["form_version_id"]
+            isOneToOne: false
+            referencedRelation: "form_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       form_knowledge_areas: {
         Row: {
           code: string | null
@@ -1207,6 +1328,10 @@ export type Database = {
     }
     Functions: {
       ensure_default_membership: { Args: never; Returns: undefined }
+      generate_submission_protocol: {
+        Args: { p_edital_id: string }
+        Returns: string
+      }
       get_anonymized_proposal: {
         Args: { p_assignment_id: string }
         Returns: Json
