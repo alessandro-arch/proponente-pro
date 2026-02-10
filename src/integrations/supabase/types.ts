@@ -267,28 +267,100 @@ export type Database = {
       }
       profiles: {
         Row: {
+          address_city: string | null
+          address_complement: string | null
+          address_country: string | null
+          address_neighborhood: string | null
+          address_number: string | null
+          address_state: string | null
+          address_street: string | null
+          address_zipcode: string | null
+          cpf: string | null
           created_at: string
           email: string | null
           full_name: string | null
           id: string
+          instagram_url: string | null
+          institution_affiliation: string | null
+          keywords: string[] | null
+          lattes_url: string | null
+          linkedin_url: string | null
+          mini_bio: string | null
+          phone: string | null
+          photo_url: string | null
+          professional_position: string | null
+          profile_completed: boolean | null
+          profile_completed_at: string | null
+          receive_editais_notifications: boolean | null
+          receive_news: boolean | null
+          research_area_cnpq: string | null
           updated_at: string
           user_id: string
+          whatsapp: string | null
         }
         Insert: {
+          address_city?: string | null
+          address_complement?: string | null
+          address_country?: string | null
+          address_neighborhood?: string | null
+          address_number?: string | null
+          address_state?: string | null
+          address_street?: string | null
+          address_zipcode?: string | null
+          cpf?: string | null
           created_at?: string
           email?: string | null
           full_name?: string | null
           id?: string
+          instagram_url?: string | null
+          institution_affiliation?: string | null
+          keywords?: string[] | null
+          lattes_url?: string | null
+          linkedin_url?: string | null
+          mini_bio?: string | null
+          phone?: string | null
+          photo_url?: string | null
+          professional_position?: string | null
+          profile_completed?: boolean | null
+          profile_completed_at?: string | null
+          receive_editais_notifications?: boolean | null
+          receive_news?: boolean | null
+          research_area_cnpq?: string | null
           updated_at?: string
           user_id: string
+          whatsapp?: string | null
         }
         Update: {
+          address_city?: string | null
+          address_complement?: string | null
+          address_country?: string | null
+          address_neighborhood?: string | null
+          address_number?: string | null
+          address_state?: string | null
+          address_street?: string | null
+          address_zipcode?: string | null
+          cpf?: string | null
           created_at?: string
           email?: string | null
           full_name?: string | null
           id?: string
+          instagram_url?: string | null
+          institution_affiliation?: string | null
+          keywords?: string[] | null
+          lattes_url?: string | null
+          linkedin_url?: string | null
+          mini_bio?: string | null
+          phone?: string | null
+          photo_url?: string | null
+          professional_position?: string | null
+          profile_completed?: boolean | null
+          profile_completed_at?: string | null
+          receive_editais_notifications?: boolean | null
+          receive_news?: boolean | null
+          research_area_cnpq?: string | null
           updated_at?: string
           user_id?: string
+          whatsapp?: string | null
         }
         Relationships: []
       }
