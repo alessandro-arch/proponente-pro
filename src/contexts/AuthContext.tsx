@@ -52,10 +52,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     // Check org membership
-    const { data: members } = await supabase
+    let { data: members } = await supabase
       .from("organization_members")
       .select("organization_id, role")
       .eq("user_id", userId);
+
+    // Fallback: ensure default membership if none exists
+    if (!members || members.length === 0) {
+      await supabase.rpc("ensure_default_membership");
+      const { data: retryMembers } = await supabase
+        .from("organization_members")
+        .select("organization_id, role")
+        .eq("user_id", userId);
+      members = retryMembers;
+    }
 
     if (members && members.length > 0) {
       setMembership({
