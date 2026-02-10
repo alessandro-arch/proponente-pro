@@ -47,6 +47,7 @@ const ReviewForm = ({ assignment, onBack }: { assignment: Assignment; onBack: ()
   const [recommendation, setRecommendation] = useState("");
   const [comments, setComments] = useState("");
   const [proposalContent, setProposalContent] = useState<any>(null);
+  const [anonymizedData, setAnonymizedData] = useState<any>(null);
   const [existingReview, setExistingReview] = useState<any>(null);
   const isReadOnly = assignment.status === "submitted";
 
@@ -64,14 +65,22 @@ const ReviewForm = ({ assignment, onBack }: { assignment: Assignment; onBack: ()
       const criteriaList = (criteriaData || []) as Criteria[];
       setCriteria(criteriaList);
 
-      // Fetch proposal answers (anonymized content)
-      const { data: answers } = await supabase
-        .from("proposal_answers")
-        .select("answers_json")
-        .eq("proposal_id", assignment.proposal_id)
-        .maybeSingle();
+      // Fetch anonymized proposal data via secure RPC
+      const { data: anonData, error: anonError } = await supabase
+        .rpc("get_anonymized_proposal", { p_assignment_id: assignment.id });
 
-      setProposalContent(answers?.answers_json || null);
+      if (anonData && !anonError) {
+        setAnonymizedData(anonData);
+        setProposalContent((anonData as any).answers || null);
+      } else {
+        // Fallback: direct fetch (for backwards compatibility)
+        const { data: answers } = await supabase
+          .from("proposal_answers")
+          .select("answers_json")
+          .eq("proposal_id", assignment.proposal_id)
+          .maybeSingle();
+        setProposalContent(answers?.answers_json || null);
+      }
 
       // Fetch existing review if any
       const { data: reviewData } = await supabase
@@ -232,7 +241,9 @@ const ReviewForm = ({ assignment, onBack }: { assignment: Assignment; onBack: ()
               <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
             </Button>
             <div>
-              <h1 className="text-lg font-bold font-heading text-foreground">Avaliação: {assignment.proposal_masked_id}</h1>
+              <h1 className="text-lg font-bold font-heading text-foreground">
+                Avaliação: {anonymizedData?.anonymous_id || assignment.proposal_masked_id}
+              </h1>
               <p className="text-xs text-muted-foreground">{assignment.edital_title}</p>
             </div>
           </div>
@@ -262,10 +273,10 @@ const ReviewForm = ({ assignment, onBack }: { assignment: Assignment; onBack: ()
             <CardDescription>Dados anonimizados para avaliação cega</CardDescription>
           </CardHeader>
           <CardContent>
-            {assignment.knowledge_area && (
+            {(anonymizedData?.knowledge_area || assignment.knowledge_area) && (
               <div className="mb-3">
                 <span className="text-xs font-medium text-muted-foreground">Área do Conhecimento:</span>
-                <p className="text-sm text-foreground">{assignment.knowledge_area}</p>
+                <p className="text-sm text-foreground">{anonymizedData?.knowledge_area || assignment.knowledge_area}</p>
               </div>
             )}
             {proposalContent && typeof proposalContent === "object" ? (
@@ -279,6 +290,24 @@ const ReviewForm = ({ assignment, onBack }: { assignment: Assignment; onBack: ()
               </div>
             ) : (
               <p className="text-sm text-muted-foreground italic">Nenhum conteúdo disponível para esta proposta.</p>
+            )}
+
+            {/* Anonymized files */}
+            {anonymizedData?.files && (anonymizedData.files as any[]).length > 0 && (
+              <div className="mt-4 pt-4 border-t border-border">
+                <span className="text-xs font-medium text-muted-foreground">Anexos:</span>
+                <div className="mt-2 space-y-1">
+                  {(anonymizedData.files as any[]).map((file: any, i: number) => (
+                    <div key={i} className="flex items-center gap-2 text-sm text-foreground">
+                      <FileText className="w-4 h-4 text-muted-foreground" />
+                      <span>{file.file_ref}</span>
+                      {file.file_type && (
+                        <Badge variant="outline" className="text-xs">{file.file_type}</Badge>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>

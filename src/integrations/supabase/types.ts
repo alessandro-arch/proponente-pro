@@ -84,6 +84,7 @@ export type Database = {
       }
       editais: {
         Row: {
+          blind_review_enabled: boolean
           created_at: string
           created_by: string
           description: string | null
@@ -98,6 +99,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          blind_review_enabled?: boolean
           created_at?: string
           created_by: string
           description?: string | null
@@ -112,6 +114,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          blind_review_enabled?: boolean
           created_at?: string
           created_by?: string
           description?: string | null
@@ -744,6 +747,14 @@ export type Database = {
     }
     Functions: {
       ensure_default_membership: { Args: never; Returns: undefined }
+      get_anonymized_proposal: {
+        Args: { p_assignment_id: string }
+        Returns: Json
+      }
+      get_proposal_anonymous_id: {
+        Args: { p_proposal_id: string }
+        Returns: string
+      }
       get_user_org_id: { Args: { _user_id: string }; Returns: string }
       get_user_org_role: {
         Args: { _user_id: string }
