@@ -254,6 +254,50 @@ export type Database = {
           },
         ]
       }
+      form_knowledge_areas: {
+        Row: {
+          code: string | null
+          created_at: string
+          description: string | null
+          form_id: string
+          id: string
+          is_active: boolean
+          name: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          code?: string | null
+          created_at?: string
+          description?: string | null
+          form_id: string
+          id?: string
+          is_active?: boolean
+          name: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          code?: string | null
+          created_at?: string
+          description?: string | null
+          form_id?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "form_knowledge_areas_form_id_fkey"
+            columns: ["form_id"]
+            isOneToOne: false
+            referencedRelation: "edital_forms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       form_questions: {
         Row: {
           created_at: string

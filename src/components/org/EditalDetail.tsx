@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, Save, Send, Lock, Plus, FileText, Settings } from "lucide-react";
+import FormKnowledgeAreas from "@/components/org/FormKnowledgeAreas";
 
 interface Edital {
   id: string;
@@ -41,6 +42,7 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
 
   // Form schema state
   const [formSchema, setFormSchema] = useState<FormSchema | null>(null);
+  const [formId, setFormId] = useState<string | null>(null);
   const [loadingForm, setLoadingForm] = useState(true);
   const [creatingForm, setCreatingForm] = useState(false);
 
@@ -56,6 +58,15 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
 
   const loadFormSchema = async () => {
     setLoadingForm(true);
+    // Load edital_forms record
+    const { data: efData } = await supabase
+      .from("edital_forms")
+      .select("id")
+      .eq("edital_id", edital.id)
+      .maybeSingle();
+    setFormId(efData?.id || null);
+
+    // Load schema
     const { data } = await supabase
       .from("edital_form_schemas")
       .select("*")
@@ -69,6 +80,29 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
   const handleCreateForm = async () => {
     if (!user) return;
     setCreatingForm(true);
+
+    // Create edital_forms record if not exists
+    let currentFormId = formId;
+    if (!currentFormId) {
+      const { data: efData, error: efError } = await supabase
+        .from("edital_forms")
+        .insert({
+          edital_id: edital.id,
+          organization_id: orgId,
+          status: "draft",
+        })
+        .select()
+        .single();
+      if (efError) {
+        toast({ title: "Erro", description: efError.message, variant: "destructive" });
+        setCreatingForm(false);
+        return;
+      }
+      currentFormId = efData.id;
+      setFormId(currentFormId);
+    }
+
+    // Create schema
     const { data, error } = await supabase
       .from("edital_form_schemas")
       .insert({
@@ -237,72 +271,81 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
             </div>
           ) : !formSchema ? (
             /* Empty state - no form yet */
-            <Card>
-              <CardContent className="py-12 text-center">
-                <FileText className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-muted-foreground mb-4">Nenhum formulário criado para este edital.</p>
-                <Button onClick={handleCreateForm} disabled={creatingForm}>
-                  {creatingForm && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                  <Plus className="w-4 h-4 mr-2" /> Criar Formulário
-                </Button>
-              </CardContent>
-            </Card>
+            <>
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <FileText className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground mb-4">Nenhum formulário criado para este edital.</p>
+                  <Button onClick={handleCreateForm} disabled={creatingForm}>
+                    {creatingForm && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                    <Plus className="w-4 h-4 mr-2" /> Criar Formulário
+                  </Button>
+                </CardContent>
+              </Card>
+              <FormKnowledgeAreas formId={null} />
+            </>
           ) : editing ? (
             /* JSON Editor */
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Editor de Formulário (MVP)</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label>schema_json</Label>
-                  <Textarea
-                    value={jsonText}
-                    onChange={(e) => handleJsonChange(e.target.value)}
-                    className="mt-1 font-mono text-sm min-h-[300px]"
-                    placeholder='{"fields": []}'
-                  />
-                  {jsonError && (
-                    <p className="text-sm text-destructive mt-1">{jsonError}</p>
-                  )}
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setEditing(false)}>Cancelar</Button>
-                  <Button onClick={handleSaveJson} disabled={savingJson || !!jsonError}>
-                    {savingJson && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                    <Save className="w-4 h-4 mr-2" /> Salvar
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Editor de Formulário (MVP)</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label>schema_json</Label>
+                    <Textarea
+                      value={jsonText}
+                      onChange={(e) => handleJsonChange(e.target.value)}
+                      className="mt-1 font-mono text-sm min-h-[300px]"
+                      placeholder='{"fields": []}'
+                    />
+                    {jsonError && (
+                      <p className="text-sm text-destructive mt-1">{jsonError}</p>
+                    )}
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setEditing(false)}>Cancelar</Button>
+                    <Button onClick={handleSaveJson} disabled={savingJson || !!jsonError}>
+                      {savingJson && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                      <Save className="w-4 h-4 mr-2" /> Salvar
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+              <FormKnowledgeAreas formId={formId} />
+            </>
           ) : (
             /* Form exists - show summary */
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">Formulário</CardTitle>
-                  <Badge variant="outline">draft</Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Versão</Label>
-                    <p className="text-foreground">{formSchema.version}</p>
+            <>
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg">Formulário</CardTitle>
+                    <Badge variant="outline">draft</Badge>
                   </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Última atualização</Label>
-                    <p className="text-foreground">{new Date(formSchema.created_at).toLocaleDateString("pt-BR")}</p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Versão</Label>
+                      <p className="text-foreground">{formSchema.version}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Última atualização</Label>
+                      <p className="text-foreground">{new Date(formSchema.created_at).toLocaleDateString("pt-BR")}</p>
+                    </div>
                   </div>
-                </div>
-                <Separator />
-                <div className="flex justify-end">
-                  <Button onClick={handleOpenEditor}>
-                    <FileText className="w-4 h-4 mr-2" /> Editar Formulário
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                  <Separator />
+                  <div className="flex justify-end">
+                    <Button onClick={handleOpenEditor}>
+                      <FileText className="w-4 h-4 mr-2" /> Editar Formulário
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+              <FormKnowledgeAreas formId={formId} />
+            </>
           )}
         </TabsContent>
 
