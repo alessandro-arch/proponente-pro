@@ -55,6 +55,30 @@ export type Database = {
           },
         ]
       }
+      cnpq_areas: {
+        Row: {
+          code: string
+          full_path: string
+          level: number
+          name: string
+          parent_code: string | null
+        }
+        Insert: {
+          code: string
+          full_path: string
+          level: number
+          name: string
+          parent_code?: string | null
+        }
+        Update: {
+          code?: string
+          full_path?: string
+          level?: number
+          name?: string
+          parent_code?: string | null
+        }
+        Relationships: []
+      }
       editais: {
         Row: {
           created_at: string
@@ -740,6 +764,8 @@ export type Database = {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
       }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       app_role:

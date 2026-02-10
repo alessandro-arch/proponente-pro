@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Save, User, MapPin, Briefcase, Bell, FileText, LogOut, ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
+import CnpqAreaSelector from "@/components/CnpqAreaSelector";
 import { Link } from "react-router-dom";
 
 const BRAZILIAN_STATES = [
@@ -228,8 +229,12 @@ const Profile = () => {
               </div>
             </div>
             <div>
-              <Label htmlFor="research_area_cnpq">Área de pesquisa (CNPq)</Label>
-              <Input id="research_area_cnpq" value={form.research_area_cnpq || ""} onChange={(e) => set("research_area_cnpq", e.target.value)} placeholder="Ex: Ciências Humanas > Educação" className="mt-1" />
+              <CnpqAreaSelector
+                label="Área do Conhecimento (CNPq)"
+                value={form.research_area_cnpq || ""}
+                onChange={(v) => set("research_area_cnpq", v)}
+                required
+              />
             </div>
             <div>
               <Label htmlFor="keywords">Palavras-chave (separadas por vírgula)</Label>
