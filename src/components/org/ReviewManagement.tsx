@@ -50,7 +50,7 @@ const ReviewManagement = ({ editalId, editalTitle }: { editalId: string; editalT
       .from("proposals")
       .select("id, knowledge_area_id, blind_code, knowledge_areas(name)")
       .eq("edital_id", editalId)
-      .eq("status", "submitted");
+      .in("status", ["submitted", "under_review", "accepted", "rejected"]);
 
     if (!proposalsData || proposalsData.length === 0) {
       setProposals([]);

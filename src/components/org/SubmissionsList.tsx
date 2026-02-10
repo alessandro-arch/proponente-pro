@@ -7,11 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Loader2, Search, Eye, Download, FileText, ArrowLeft } from "lucide-react";
+import { Loader2, Search, Eye, Download, FileText, ArrowLeft, Users } from "lucide-react";
+import ReviewerAssignment from "@/components/org/ReviewerAssignment";
 
 interface SubmissionsListProps {
   editalId: string;
   editalTitle: string;
+  orgId?: string;
 }
 
 const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
@@ -23,20 +25,34 @@ const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secon
   rejected: { label: "Rejeitada", variant: "destructive" },
 };
 
-const SubmissionsList = ({ editalId, editalTitle }: SubmissionsListProps) => {
+const SubmissionsList = ({ editalId, editalTitle, orgId }: SubmissionsListProps) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedSubmission, setSelectedSubmission] = useState<any>(null);
+  const [assignDialog, setAssignDialog] = useState<{ proposalId: string; blindCode: string } | null>(null);
 
-  const { data: submissions, isLoading } = useQuery({
+  const { data: submissions, isLoading, refetch } = useQuery({
     queryKey: ["admin-submissions", editalId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("edital_submissions")
         .select("*")
         .eq("edital_id", editalId)
-        .eq("status", "submitted")
+        .in("status", ["submitted", "under_review", "evaluated", "approved", "rejected"])
         .order("submitted_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Fetch proposals linked to submissions for reviewer assignment
+  const { data: proposals } = useQuery({
+    queryKey: ["proposals-for-submissions", editalId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("proposals")
+        .select("id, blind_code, proponente_user_id, status")
+        .eq("edital_id", editalId);
       if (error) throw error;
       return data;
     },
@@ -162,8 +178,14 @@ const SubmissionsList = ({ editalId, editalTitle }: SubmissionsListProps) => {
               }}>
                 <Download className="w-4 h-4 mr-1" /> Baixar PDF
               </Button>
-              <Button size="sm" variant="secondary" disabled>
-                Enviar para avaliação (em breve)
+              <Button size="sm" variant="secondary" onClick={() => {
+                // Find proposal for this submission
+                const proposal = (proposals || []).find((p: any) => p.proponente_user_id === selectedSubmission.user_id);
+                if (proposal && orgId) {
+                  setAssignDialog({ proposalId: proposal.id, blindCode: proposal.blind_code || selectedSubmission.protocol });
+                }
+              }} disabled={!orgId}>
+                <Users className="w-4 h-4 mr-1" /> Enviar para avaliação
               </Button>
             </div>
           </CardContent>
@@ -273,6 +295,17 @@ const SubmissionsList = ({ editalId, editalTitle }: SubmissionsListProps) => {
             );
           })}
         </div>
+      )}
+      {assignDialog && orgId && (
+        <ReviewerAssignment
+          open={!!assignDialog}
+          onClose={() => setAssignDialog(null)}
+          proposalId={assignDialog.proposalId}
+          proposalBlindCode={assignDialog.blindCode}
+          editalId={editalId}
+          orgId={orgId}
+          onAssigned={() => { refetch(); }}
+        />
       )}
     </div>
   );
