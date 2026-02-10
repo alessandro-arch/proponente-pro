@@ -2,16 +2,15 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, Save, Send, Lock, Plus, FileText, Settings } from "lucide-react";
+import { Loader2, ArrowLeft, Send, Lock, Plus, FileText, Settings } from "lucide-react";
 import FormKnowledgeAreas from "@/components/org/FormKnowledgeAreas";
+import FormSectionBuilder from "@/components/org/FormSectionBuilder";
+import FormPreview from "@/components/org/FormPreview";
 
 interface Edital {
   id: string;
@@ -26,90 +25,43 @@ interface Edital {
   blind_review_enabled: boolean;
 }
 
-interface FormSchema {
-  id: string;
-  edital_id: string;
-  version: number;
-  schema_json: any;
-  is_active: boolean;
-  created_at: string;
-}
-
 const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string; onBack: () => void }) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [status, setStatus] = useState(edital.status);
 
-  // Form schema state
-  const [formSchema, setFormSchema] = useState<FormSchema | null>(null);
+  // Form state
   const [formId, setFormId] = useState<string | null>(null);
+  const [formStatus, setFormStatus] = useState("draft");
   const [loadingForm, setLoadingForm] = useState(true);
   const [creatingForm, setCreatingForm] = useState(false);
-
-  // JSON editor state
-  const [editing, setEditing] = useState(false);
-  const [jsonText, setJsonText] = useState("");
-  const [jsonError, setJsonError] = useState<string | null>(null);
-  const [savingJson, setSavingJson] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
-    loadFormSchema();
+    loadForm();
   }, [edital.id]);
 
-  const loadFormSchema = async () => {
+  const loadForm = async () => {
     setLoadingForm(true);
-    // Load edital_forms record
-    const { data: efData } = await supabase
-      .from("edital_forms")
-      .select("id")
-      .eq("edital_id", edital.id)
-      .maybeSingle();
-    setFormId(efData?.id || null);
-
-    // Load schema
     const { data } = await supabase
-      .from("edital_form_schemas")
-      .select("*")
+      .from("edital_forms")
+      .select("id, status")
       .eq("edital_id", edital.id)
-      .eq("is_active", true)
       .maybeSingle();
-    setFormSchema(data as FormSchema | null);
+    setFormId(data?.id || null);
+    setFormStatus((data as any)?.status || "draft");
     setLoadingForm(false);
   };
 
   const handleCreateForm = async () => {
     if (!user) return;
     setCreatingForm(true);
-
-    // Create edital_forms record if not exists
-    let currentFormId = formId;
-    if (!currentFormId) {
-      const { data: efData, error: efError } = await supabase
-        .from("edital_forms")
-        .insert({
-          edital_id: edital.id,
-          organization_id: orgId,
-          status: "draft",
-        })
-        .select()
-        .single();
-      if (efError) {
-        toast({ title: "Erro", description: efError.message, variant: "destructive" });
-        setCreatingForm(false);
-        return;
-      }
-      currentFormId = efData.id;
-      setFormId(currentFormId);
-    }
-
-    // Create schema
     const { data, error } = await supabase
-      .from("edital_form_schemas")
+      .from("edital_forms")
       .insert({
         edital_id: edital.id,
-        version: 1,
-        schema_json: {},
-        is_active: true,
+        organization_id: orgId,
+        status: "draft",
       })
       .select()
       .single();
@@ -117,47 +69,9 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     } else {
-      setFormSchema(data as FormSchema);
+      setFormId(data.id);
+      setFormStatus("draft");
       toast({ title: "Formulário criado!" });
-    }
-  };
-
-  const handleOpenEditor = () => {
-    if (!formSchema) return;
-    setJsonText(JSON.stringify(formSchema.schema_json, null, 2));
-    setJsonError(null);
-    setEditing(true);
-  };
-
-  const handleJsonChange = (value: string) => {
-    setJsonText(value);
-    try {
-      JSON.parse(value);
-      setJsonError(null);
-    } catch (e: any) {
-      setJsonError(e.message);
-    }
-  };
-
-  const handleSaveJson = async () => {
-    if (!formSchema) return;
-    try {
-      const parsed = JSON.parse(jsonText);
-      setSavingJson(true);
-      const { error } = await supabase
-        .from("edital_form_schemas")
-        .update({ schema_json: parsed })
-        .eq("id", formSchema.id);
-      setSavingJson(false);
-      if (error) {
-        toast({ title: "Erro", description: error.message, variant: "destructive" });
-      } else {
-        setFormSchema({ ...formSchema, schema_json: parsed });
-        setEditing(false);
-        toast({ title: "Formulário salvo!" });
-      }
-    } catch {
-      setJsonError("JSON inválido");
     }
   };
 
@@ -220,7 +134,7 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
           <TabsTrigger value="settings">Configurações</TabsTrigger>
         </TabsList>
 
-        {/* Visão Geral - read-only */}
+        {/* Visão Geral */}
         <TabsContent value="overview">
           <Card>
             <CardHeader>
@@ -269,8 +183,7 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
             <div className="flex justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
-          ) : !formSchema ? (
-            /* Empty state - no form yet */
+          ) : !formId ? (
             <>
               <Card>
                 <CardContent className="py-12 text-center">
@@ -284,72 +197,26 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
               </Card>
               <FormKnowledgeAreas formId={null} />
             </>
-          ) : editing ? (
-            /* JSON Editor */
-            <>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Editor de Formulário (MVP)</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <Label>schema_json</Label>
-                    <Textarea
-                      value={jsonText}
-                      onChange={(e) => handleJsonChange(e.target.value)}
-                      className="mt-1 font-mono text-sm min-h-[300px]"
-                      placeholder='{"fields": []}'
-                    />
-                    {jsonError && (
-                      <p className="text-sm text-destructive mt-1">{jsonError}</p>
-                    )}
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => setEditing(false)}>Cancelar</Button>
-                    <Button onClick={handleSaveJson} disabled={savingJson || !!jsonError}>
-                      {savingJson && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                      <Save className="w-4 h-4 mr-2" /> Salvar
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-              <FormKnowledgeAreas formId={formId} />
-            </>
+          ) : showPreview ? (
+            <FormPreview formId={formId} editalId={edital.id} onBack={() => setShowPreview(false)} />
           ) : (
-            /* Form exists - show summary */
-            <>
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">Formulário</CardTitle>
-                    <Badge variant="outline">draft</Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Versão</Label>
-                      <p className="text-foreground">{formSchema.version}</p>
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Última atualização</Label>
-                      <p className="text-foreground">{new Date(formSchema.created_at).toLocaleDateString("pt-BR")}</p>
-                    </div>
-                  </div>
-                  <Separator />
-                  <div className="flex justify-end">
-                    <Button onClick={handleOpenEditor}>
-                      <FileText className="w-4 h-4 mr-2" /> Editar Formulário
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+            <div className="space-y-6">
+              {/* Form Builder */}
+              <FormSectionBuilder
+                formId={formId}
+                formStatus={formStatus}
+                editalId={edital.id}
+                onStatusChange={(s) => setFormStatus(s)}
+                onPreview={() => setShowPreview(true)}
+              />
+
+              {/* Knowledge Areas */}
               <FormKnowledgeAreas formId={formId} />
-            </>
+            </div>
           )}
         </TabsContent>
 
-        {/* Configurações - placeholder */}
+        {/* Configurações */}
         <TabsContent value="settings">
           <Card>
             <CardHeader>
