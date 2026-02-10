@@ -2,16 +2,18 @@ import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Navigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Loader2, FileText, LogOut, UserCircle, LayoutDashboard, ScrollText, FolderTree, Users } from "lucide-react";
+import { Loader2, FileText, LogOut, UserCircle, LayoutDashboard, ScrollText, FolderTree, Users, Shield } from "lucide-react";
 import OrgDashboard from "@/components/org/OrgDashboard";
 import EditaisList from "@/components/org/EditaisList";
 import KnowledgeAreas from "@/components/org/KnowledgeAreas";
+import AuditLogViewer from "@/components/org/AuditLogViewer";
 
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "editais", label: "Editais", icon: ScrollText },
   { key: "areas", label: "Áreas do Conhecimento", icon: FolderTree },
   { key: "members", label: "Membros", icon: Users },
+  { key: "audit", label: "Auditoria", icon: Shield },
 ] as const;
 
 type NavKey = typeof NAV_ITEMS[number]["key"];
@@ -87,6 +89,7 @@ const OrgPanel = () => {
               <p className="text-muted-foreground">Gestão de membros será implementada na próxima iteração.</p>
             </div>
           )}
+          {activeNav === "audit" && <AuditLogViewer orgId={orgId} />}
         </div>
       </main>
     </div>
