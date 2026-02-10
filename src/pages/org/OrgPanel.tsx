@@ -2,14 +2,17 @@ import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Navigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Loader2, FileText, LogOut, UserCircle, LayoutDashboard, ScrollText, Users, Shield } from "lucide-react";
+import { Loader2, FileText, LogOut, UserCircle, LayoutDashboard, ScrollText, Users, Shield, UserSearch } from "lucide-react";
 import OrgDashboard from "@/components/org/OrgDashboard";
 import EditaisList from "@/components/org/EditaisList";
 import AuditLogViewer from "@/components/org/AuditLogViewer";
+import ReviewersList from "@/components/org/reviewers/ReviewersList";
+import ReviewerDetail from "@/components/org/reviewers/ReviewerDetail";
 
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "editais", label: "Editais", icon: ScrollText },
+  { key: "reviewers", label: "Avaliadores", icon: UserSearch },
   { key: "members", label: "Membros", icon: Users },
   { key: "audit", label: "Auditoria", icon: Shield },
 ] as const;
@@ -19,6 +22,7 @@ type NavKey = typeof NAV_ITEMS[number]["key"];
 const OrgPanel = () => {
   const { user, loading, membership, signOut } = useAuth();
   const [activeNav, setActiveNav] = useState<NavKey>("dashboard");
+  const [selectedReviewerId, setSelectedReviewerId] = useState<string | null>(null);
 
   if (loading) {
     return (
@@ -52,7 +56,7 @@ const OrgPanel = () => {
           {NAV_ITEMS.map((item) => (
             <button
               key={item.key}
-              onClick={() => setActiveNav(item.key)}
+              onClick={() => { setActiveNav(item.key); setSelectedReviewerId(null); }}
               className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 activeNav === item.key
                   ? "bg-primary text-primary-foreground"
@@ -80,6 +84,20 @@ const OrgPanel = () => {
         <div className="p-8">
           {activeNav === "dashboard" && <OrgDashboard orgId={orgId} />}
           {activeNav === "editais" && <EditaisList orgId={orgId} />}
+          {activeNav === "reviewers" && (
+            selectedReviewerId ? (
+              <ReviewerDetail
+                reviewerId={selectedReviewerId}
+                orgId={orgId}
+                onBack={() => setSelectedReviewerId(null)}
+              />
+            ) : (
+              <ReviewersList
+                orgId={orgId}
+                onViewReviewer={(id) => setSelectedReviewerId(id)}
+              />
+            )
+          )}
           {activeNav === "members" && (
             <div className="text-center py-12">
               <Users className="w-12 h-12 mx-auto text-muted-foreground mb-4" />

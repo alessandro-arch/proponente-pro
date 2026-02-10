@@ -1631,6 +1631,164 @@ export type Database = {
           },
         ]
       }
+      reviewer_conflicts: {
+        Row: {
+          conflict_type: string
+          declared_at: string
+          declared_by: string | null
+          description: string | null
+          id: string
+          org_id: string
+          reviewer_id: string
+        }
+        Insert: {
+          conflict_type?: string
+          declared_at?: string
+          declared_by?: string | null
+          description?: string | null
+          id?: string
+          org_id: string
+          reviewer_id: string
+        }
+        Update: {
+          conflict_type?: string
+          declared_at?: string
+          declared_by?: string | null
+          description?: string | null
+          id?: string
+          org_id?: string
+          reviewer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reviewer_conflicts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reviewer_conflicts_reviewer_id_fkey"
+            columns: ["reviewer_id"]
+            isOneToOne: false
+            referencedRelation: "reviewers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reviewer_invites: {
+        Row: {
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          org_id: string
+          reviewer_id: string
+          token_hash: string
+          used_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          expires_at: string
+          id?: string
+          org_id: string
+          reviewer_id: string
+          token_hash: string
+          used_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          org_id?: string
+          reviewer_id?: string
+          token_hash?: string
+          used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reviewer_invites_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reviewer_invites_reviewer_id_fkey"
+            columns: ["reviewer_id"]
+            isOneToOne: false
+            referencedRelation: "reviewers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reviewers: {
+        Row: {
+          accepted_at: string | null
+          areas: Json
+          bio: string | null
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          institution: string
+          invited_at: string | null
+          keywords: string[] | null
+          lattes_url: string | null
+          orcid: string | null
+          org_id: string
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          accepted_at?: string | null
+          areas?: Json
+          bio?: string | null
+          created_at?: string
+          email: string
+          full_name: string
+          id?: string
+          institution: string
+          invited_at?: string | null
+          keywords?: string[] | null
+          lattes_url?: string | null
+          orcid?: string | null
+          org_id: string
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          accepted_at?: string | null
+          areas?: Json
+          bio?: string | null
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          institution?: string
+          invited_at?: string | null
+          keywords?: string[] | null
+          lattes_url?: string | null
+          orcid?: string | null
+          org_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reviewers_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reviews: {
         Row: {
           assignment_id: string

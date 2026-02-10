@@ -15,6 +15,7 @@ import ProponentePanel from "./pages/proponente/ProponentePanel";
 import ReviewerPanel from "./pages/reviewer/ReviewerPanel";
 import FinanceiroPanel from "./pages/financeiro/FinanceiroPanel";
 import Profile from "./pages/Profile";
+import ReviewerInvitePage from "./pages/invite/ReviewerInvitePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -37,6 +38,7 @@ const App = () => (
             <Route path="/proponente/*" element={<ProtectedRoute allowedRoles={["proponente"]}><ProponentePanel /></ProtectedRoute>} />
             <Route path="/reviewer/*" element={<ProtectedRoute allowedRoles={["reviewer"]}><ReviewerPanel /></ProtectedRoute>} />
             <Route path="/financeiro/*" element={<ProtectedRoute allowedRoles={["proponente"]}><FinanceiroPanel /></ProtectedRoute>} />
+            <Route path="/invite/reviewer" element={<ReviewerInvitePage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
