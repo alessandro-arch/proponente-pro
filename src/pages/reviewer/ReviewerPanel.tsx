@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, FileText, LogOut, UserCircle, ClipboardCheck, Eye, AlertTriangle, Clock } from "lucide-react";
+import { Loader2, FileText, LogOut, UserCircle, ClipboardCheck, Eye, AlertTriangle, Clock, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import ReviewForm from "@/components/reviewer/ReviewForm";
@@ -14,7 +14,7 @@ interface Assignment {
   proposal_id: string;
   status: string;
   assigned_at: string;
-  proposal_masked_id: string;
+  proposal_blind_code: string;
   edital_title: string;
   edital_id: string;
   knowledge_area: string | null;
@@ -37,7 +37,7 @@ const ReviewerPanel = () => {
       .select(`
         id, proposal_id, status, assigned_at, submitted_at,
         proposals!inner (
-          id, edital_id, knowledge_area_id, status,
+          id, edital_id, knowledge_area_id, status, blind_code,
           editais!inner ( title, review_deadline ),
           knowledge_areas ( name )
         )
@@ -56,8 +56,7 @@ const ReviewerPanel = () => {
       proposal_id: a.proposal_id,
       status: a.status,
       assigned_at: a.assigned_at,
-      // Deterministic anonymous ID: PROP- + first 8 chars of MD5 hash
-      proposal_masked_id: `PROP-${md5Hash(a.proposal_id).slice(0, 8).toUpperCase()}`,
+      proposal_blind_code: a.proposals?.blind_code || "SEM-CÓDIGO",
       edital_title: a.proposals?.editais?.title || "Edital",
       edital_id: a.proposals?.edital_id || "",
       knowledge_area: a.proposals?.knowledge_areas?.name || null,
@@ -67,19 +66,6 @@ const ReviewerPanel = () => {
     setAssignments(mapped);
     setLoading(false);
   };
-
-  // Simple deterministic hash to match DB get_proposal_anonymous_id
-  function md5Hash(input: string): string {
-    // Use a simple hash that matches the DB md5() output pattern
-    // We'll call the DB function instead for consistency
-    let hash = 0;
-    for (let i = 0; i < input.length; i++) {
-      const char = input.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash;
-    }
-    return Math.abs(hash).toString(16).padStart(8, '0');
-  }
 
   useEffect(() => { fetchAssignments(); }, [user]);
 
@@ -95,7 +81,10 @@ const ReviewerPanel = () => {
   if (selectedAssignment) {
     return (
       <ReviewForm
-        assignment={selectedAssignment}
+        assignment={{
+          ...selectedAssignment,
+          proposal_masked_id: selectedAssignment.proposal_blind_code,
+        }}
         onBack={() => { setSelectedAssignment(null); fetchAssignments(); }}
       />
     );
@@ -121,19 +110,25 @@ const ReviewerPanel = () => {
         </div>
       </header>
 
-      {/* Confidentiality notice */}
+      {/* Blind review institutional notice */}
       <div className="bg-accent/30 border-b border-accent/50">
-        <div className="container mx-auto px-4 py-3 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-accent-foreground flex-shrink-0" />
-          <p className="text-xs text-accent-foreground">
-            <strong>Avaliação cega:</strong> Esta é uma avaliação cega. Qualquer tentativa de identificação do proponente viola as regras do edital.
-          </p>
+        <div className="container mx-auto px-4 py-3 flex items-center gap-3">
+          <ShieldCheck className="w-5 h-5 text-accent-foreground flex-shrink-0" />
+          <div>
+            <p className="text-xs font-semibold text-accent-foreground">
+              Avaliação Cega — Blind Review
+            </p>
+            <p className="text-xs text-accent-foreground/80">
+              Este processo adota avaliação cega. Qualquer tentativa de identificação do proponente viola as normas do edital.
+              Você não terá acesso a nome, instituição ou qualquer dado pessoal do proponente.
+            </p>
+          </div>
         </div>
       </div>
 
       <main className="container mx-auto px-4 py-8">
-        <h2 className="text-2xl font-bold font-heading text-foreground mb-2">Minhas Avaliações</h2>
-        <p className="text-muted-foreground mb-6">Propostas atribuídas para sua avaliação</p>
+        <h2 className="text-2xl font-bold font-heading text-foreground mb-2">Propostas Cegas Atribuídas</h2>
+        <p className="text-muted-foreground mb-6">Avalie as propostas usando apenas o código cego e o conteúdo técnico</p>
 
         {loading ? (
           <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
@@ -152,7 +147,8 @@ const ReviewerPanel = () => {
                   <div className="flex items-start justify-between">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm font-bold text-primary">{a.proposal_masked_id}</span>
+                        <ShieldCheck className="w-4 h-4 text-muted-foreground" />
+                        <span className="font-mono text-sm font-bold text-primary">{a.proposal_blind_code}</span>
                         {statusBadge(a.status)}
                       </div>
                       <p className="text-sm text-foreground font-medium">{a.edital_title}</p>
