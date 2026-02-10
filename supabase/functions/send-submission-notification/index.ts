@@ -57,7 +57,7 @@ const handler = async (req: Request): Promise<Response> => {
     const viewUrl = `${appUrl}/proponente`;
 
     const emailResponse = await resend.emails.send({
-      from: "SisConnecta <noreply@sisconnecta.com.br>",
+      from: "SisConnecta <administrativo@icca.org.br>",
       to: [recipientEmail],
       subject: `Proposta submetida com sucesso — Protocolo ${protocol}`,
       html: `
