@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { ArrowRight, FileText } from "lucide-react";
+import { ArrowRight, FileText, Shield } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const HeroSection = () => {
@@ -7,6 +7,26 @@ const HeroSection = () => {
 
   return (
     <section className="relative min-h-[85vh] flex items-center gradient-hero overflow-hidden">
+      {/* Header bar */}
+      <div className="absolute top-0 left-0 right-0 z-20">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-primary-foreground/10 flex items-center justify-center">
+              <FileText className="w-4 h-4 text-secondary" />
+            </div>
+            <span className="text-sm font-bold font-heading text-primary-foreground">SisConnecta Editais</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-primary-foreground/50 hover:text-primary-foreground/80 hover:bg-primary-foreground/10 text-xs gap-1.5"
+            onClick={() => navigate("/login?role=admin")}
+          >
+            <Shield className="w-3.5 h-3.5" />
+            Acesso Administrativo
+          </Button>
+        </div>
+      </div>
       {/* Decorative elements */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-40 -right-40 w-80 h-80 rounded-full bg-secondary/10 blur-3xl" />
