@@ -9,12 +9,12 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, Save, Send, Lock, Plus, Trash2, GripVertical, ShieldCheck } from "lucide-react";
+import { Loader2, ArrowLeft, Save, Send, Lock, Plus, Trash2, GripVertical, ShieldCheck, Settings } from "lucide-react";
 import ReviewManagement from "@/components/org/ReviewManagement";
 import IdentityReveal from "@/components/org/IdentityReveal";
+import EditalFormBuilder from "@/components/org/EditalFormBuilder";
 
 interface Edital {
   id: string;
@@ -24,19 +24,9 @@ interface Edital {
   start_date: string | null;
   end_date: string | null;
   created_at: string;
-}
-
-interface KnowledgeArea {
-  id: string;
-  name: string;
-}
-
-interface FormField {
-  id: string;
-  label: string;
-  type: "short_text" | "long_text" | "number" | "select" | "upload_pdf";
-  required: boolean;
-  options?: string[];
+  review_deadline: string | null;
+  min_reviewers_per_proposal: number | null;
+  blind_review_enabled: boolean;
 }
 
 interface Criteria {
@@ -55,53 +45,22 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
   const [description, setDescription] = useState(edital.description || "");
   const [startDate, setStartDate] = useState(edital.start_date || "");
   const [endDate, setEndDate] = useState(edital.end_date || "");
+  const [reviewDeadline, setReviewDeadline] = useState(edital.review_deadline || "");
+  const [minReviewers, setMinReviewers] = useState(edital.min_reviewers_per_proposal || 3);
+  const [blindReview, setBlindReview] = useState(edital.blind_review_enabled);
   const [status, setStatus] = useState(edital.status);
   const [saving, setSaving] = useState(false);
 
-  // Areas tab
-  const [allAreas, setAllAreas] = useState<KnowledgeArea[]>([]);
-  const [linkedAreaIds, setLinkedAreaIds] = useState<string[]>([]);
-  const [loadingAreas, setLoadingAreas] = useState(true);
-
-  // Form tab
-  const [formFields, setFormFields] = useState<FormField[]>([]);
-  const [loadingForm, setLoadingForm] = useState(true);
-  const [schemaId, setSchemaId] = useState<string | null>(null);
-
-  // Proposals tab
+  // Proposals
   const [proposals, setProposals] = useState<any[]>([]);
   const [loadingProposals, setLoadingProposals] = useState(true);
 
-  // Barema tab
+  // Barema
   const [criteriaList, setCriteriaList] = useState<Criteria[]>([]);
   const [loadingCriteria, setLoadingCriteria] = useState(true);
 
   useEffect(() => {
     const loadAll = async () => {
-      // Load areas
-      setLoadingAreas(true);
-      const [areasRes, linkedRes] = await Promise.all([
-        supabase.from("knowledge_areas").select("id, name").eq("organization_id", orgId).order("name"),
-        supabase.from("edital_areas").select("knowledge_area_id").eq("edital_id", edital.id),
-      ]);
-      setAllAreas((areasRes.data || []) as KnowledgeArea[]);
-      setLinkedAreaIds((linkedRes.data || []).map((a: any) => a.knowledge_area_id));
-      setLoadingAreas(false);
-
-      // Load form schema
-      setLoadingForm(true);
-      const { data: schemaData } = await supabase
-        .from("edital_form_schemas")
-        .select("*")
-        .eq("edital_id", edital.id)
-        .eq("is_active", true)
-        .maybeSingle();
-      if (schemaData) {
-        setSchemaId(schemaData.id);
-        setFormFields(Array.isArray(schemaData.schema_json) ? (schemaData.schema_json as unknown as FormField[]) : []);
-      }
-      setLoadingForm(false);
-
       // Load proposals
       setLoadingProposals(true);
       const { data: propData } = await supabase
@@ -130,12 +89,18 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
       setLoadingCriteria(false);
     };
     loadAll();
-  }, [edital.id, orgId]);
+  }, [edital.id]);
 
   const handleSaveDetails = async () => {
     setSaving(true);
     const { error } = await supabase.from("editais").update({
-      title, description: description || null, start_date: startDate || null, end_date: endDate || null,
+      title,
+      description: description || null,
+      start_date: startDate || null,
+      end_date: endDate || null,
+      review_deadline: reviewDeadline || null,
+      min_reviewers_per_proposal: minReviewers,
+      blind_review_enabled: blindReview,
     }).eq("id", edital.id);
     setSaving(false);
     if (error) toast({ title: "Erro", description: error.message, variant: "destructive" });
@@ -146,42 +111,6 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
     const { error } = await supabase.from("editais").update({ status: newStatus as "draft" | "published" | "closed" }).eq("id", edital.id);
     if (error) toast({ title: "Erro", description: error.message, variant: "destructive" });
     else { setStatus(newStatus); toast({ title: `Edital ${newStatus === "published" ? "publicado" : newStatus === "closed" ? "encerrado" : "revertido"}!` }); }
-  };
-
-  // Areas
-  const toggleArea = async (areaId: string) => {
-    if (linkedAreaIds.includes(areaId)) {
-      await supabase.from("edital_areas").delete().eq("edital_id", edital.id).eq("knowledge_area_id", areaId);
-      setLinkedAreaIds((prev) => prev.filter((id) => id !== areaId));
-    } else {
-      await supabase.from("edital_areas").insert({ edital_id: edital.id, knowledge_area_id: areaId });
-      setLinkedAreaIds((prev) => [...prev, areaId]);
-    }
-  };
-
-  // Form schema
-  const addFormField = () => {
-    setFormFields((prev) => [...prev, { id: crypto.randomUUID(), label: "", type: "short_text", required: false }]);
-  };
-
-  const updateField = (id: string, field: Partial<FormField>) => {
-    setFormFields((prev) => prev.map((f) => f.id === id ? { ...f, ...field } : f));
-  };
-
-  const removeField = (id: string) => setFormFields((prev) => prev.filter((f) => f.id !== id));
-
-  const saveFormSchema = async () => {
-    setSaving(true);
-    if (schemaId) {
-      await supabase.from("edital_form_schemas").update({ schema_json: formFields as any }).eq("id", schemaId);
-    } else {
-      const { data } = await supabase.from("edital_form_schemas").insert({
-        edital_id: edital.id, schema_json: formFields as any, is_active: true,
-      }).select("id").single();
-      if (data) setSchemaId(data.id);
-    }
-    setSaving(false);
-    toast({ title: "Formulário salvo!" });
   };
 
   // Criteria
@@ -197,9 +126,7 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
 
   const saveCriteria = async () => {
     setSaving(true);
-    // Delete existing
     await supabase.from("scoring_criteria").delete().eq("edital_id", edital.id);
-    // Insert new
     if (criteriaList.length > 0) {
       const rows = criteriaList.map((c, i) => ({
         edital_id: edital.id,
@@ -244,19 +171,18 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
         </div>
       </div>
 
-      <Tabs defaultValue="details">
+      <Tabs defaultValue="overview">
         <TabsList className="mb-6">
-          <TabsTrigger value="details">Detalhes</TabsTrigger>
-          <TabsTrigger value="areas">Áreas</TabsTrigger>
+          <TabsTrigger value="overview">Visão Geral</TabsTrigger>
           <TabsTrigger value="form">Formulário</TabsTrigger>
-          <TabsTrigger value="barema">Barema</TabsTrigger>
-          <TabsTrigger value="proposals">Propostas</TabsTrigger>
-          <TabsTrigger value="reviews">Avaliações</TabsTrigger>
-          <TabsTrigger value="identity">Identidade</TabsTrigger>
+          <TabsTrigger value="barema">Critérios e Barema</TabsTrigger>
+          <TabsTrigger value="reviews">Avaliação</TabsTrigger>
+          <TabsTrigger value="proposals">Relatórios</TabsTrigger>
+          <TabsTrigger value="settings">Configurações</TabsTrigger>
         </TabsList>
 
-        {/* Details */}
-        <TabsContent value="details">
+        {/* Visão Geral */}
+        <TabsContent value="overview">
           <Card>
             <CardContent className="p-6 space-y-4">
               <div>
@@ -285,29 +211,29 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
 
-        {/* Areas */}
-        <TabsContent value="areas">
-          <Card>
-            <CardHeader><CardTitle className="text-lg">Áreas do Conhecimento vinculadas</CardTitle></CardHeader>
+          {/* Proposals summary */}
+          <Card className="mt-6">
+            <CardHeader><CardTitle className="text-lg">Propostas</CardTitle></CardHeader>
             <CardContent>
-              {loadingAreas ? <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" /> : allAreas.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhuma área cadastrada. Cadastre áreas na seção "Áreas do Conhecimento".</p>
+              {loadingProposals ? <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" /> : proposals.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhuma proposta recebida.</p>
               ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                  {allAreas.map((area) => (
-                    <button
-                      key={area.id}
-                      onClick={() => toggleArea(area.id)}
-                      className={`px-3 py-2 rounded-lg text-sm border transition-colors text-left ${
-                        linkedAreaIds.includes(area.id)
-                          ? "bg-primary/10 border-primary/30 text-primary font-medium"
-                          : "bg-card border-border text-muted-foreground hover:bg-muted"
-                      }`}
-                    >
-                      {area.name}
-                    </button>
+                <div className="space-y-2">
+                  {proposals.map((p: any) => (
+                    <div key={p.id} className="flex items-center justify-between p-3 rounded-lg border border-border">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-muted-foreground" />
+                        <span className="font-mono text-sm font-bold text-primary">{p.blind_code || p.id.slice(0, 8)}</span>
+                        {p.knowledge_areas?.name && <span className="text-xs text-muted-foreground ml-2">{p.knowledge_areas.name}</span>}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {proposalStatusBadge(p.status)}
+                        <span className="text-xs text-muted-foreground">
+                          {p.submitted_at ? new Date(p.submitted_at).toLocaleDateString("pt-BR") : new Date(p.created_at).toLocaleDateString("pt-BR")}
+                        </span>
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}
@@ -315,58 +241,12 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
           </Card>
         </TabsContent>
 
-        {/* Form */}
+        {/* Formulário */}
         <TabsContent value="form">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Formulário do Edital</CardTitle>
-                <Button size="sm" variant="outline" onClick={addFormField}><Plus className="w-4 h-4 mr-1" /> Campo</Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {loadingForm ? <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" /> : formFields.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum campo configurado. Adicione campos ao formulário.</p>
-              ) : (
-                formFields.map((f, i) => (
-                  <div key={f.id} className="flex items-start gap-3 p-4 rounded-lg border border-border bg-muted/30">
-                    <GripVertical className="w-4 h-4 mt-2 text-muted-foreground flex-shrink-0" />
-                    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <Input value={f.label} onChange={(e) => updateField(f.id, { label: e.target.value })} placeholder="Nome do campo" />
-                      <Select value={f.type} onValueChange={(v) => updateField(f.id, { type: v as FormField["type"] })}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="short_text">Texto curto</SelectItem>
-                          <SelectItem value="long_text">Texto longo</SelectItem>
-                          <SelectItem value="number">Número</SelectItem>
-                          <SelectItem value="select">Seleção</SelectItem>
-                          <SelectItem value="upload_pdf">Upload PDF</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <div className="flex items-center gap-2">
-                        <label className="flex items-center gap-1 text-sm text-muted-foreground cursor-pointer">
-                          <input type="checkbox" checked={f.required} onChange={(e) => updateField(f.id, { required: e.target.checked })} className="rounded" />
-                          Obrigatório
-                        </label>
-                        <Button size="icon" variant="ghost" className="ml-auto" onClick={() => removeField(f.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-              {formFields.length > 0 && (
-                <div className="flex justify-end">
-                  <Button onClick={saveFormSchema} disabled={saving}>
-                    {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                    <Save className="w-4 h-4 mr-2" /> Salvar Formulário
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <EditalFormBuilder editalId={edital.id} orgId={orgId} />
         </TabsContent>
 
-        {/* Barema */}
+        {/* Critérios e Barema */}
         <TabsContent value="barema">
           <Card>
             <CardHeader>
@@ -419,43 +299,10 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
           </Card>
         </TabsContent>
 
-        {/* Proposals */}
-        <TabsContent value="proposals">
-          <Card>
-            <CardHeader><CardTitle className="text-lg">Propostas</CardTitle></CardHeader>
-            <CardContent>
-              {loadingProposals ? <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" /> : proposals.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhuma proposta recebida.</p>
-              ) : (
-                <div className="space-y-2">
-                  {proposals.map((p: any) => (
-                    <div key={p.id} className="flex items-center justify-between p-3 rounded-lg border border-border">
-                      <div className="space-y-0.5 flex items-center gap-2">
-                        <ShieldCheck className="w-4 h-4 text-muted-foreground" />
-                        <span className="font-mono text-sm font-bold text-primary">{p.blind_code || p.id.slice(0, 8)}</span>
-                        {p.knowledge_areas?.name && <span className="text-xs text-muted-foreground ml-2">{p.knowledge_areas.name}</span>}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {proposalStatusBadge(p.status)}
-                        <span className="text-xs text-muted-foreground">
-                          {p.submitted_at ? new Date(p.submitted_at).toLocaleDateString("pt-BR") : new Date(p.created_at).toLocaleDateString("pt-BR")}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Reviews */}
+        {/* Avaliação */}
         <TabsContent value="reviews">
           <ReviewManagement editalId={edital.id} editalTitle={edital.title} />
-        </TabsContent>
-
-        {/* Identity Reveal */}
-        <TabsContent value="identity">
+          <Separator className="my-6" />
           <IdentityReveal
             editalId={edital.id}
             editalTitle={edital.title}
@@ -466,6 +313,48 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
               status: p.status,
             }))}
           />
+        </TabsContent>
+
+        {/* Relatórios (Proposals) */}
+        <TabsContent value="proposals">
+          <Card>
+            <CardHeader><CardTitle className="text-lg">Relatórios</CardTitle></CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">Relatórios detalhados serão implementados na próxima iteração.</p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Configurações */}
+        <TabsContent value="settings">
+          <Card>
+            <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Settings className="w-5 h-5" /> Configurações do Edital</CardTitle></CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Prazo de avaliação</Label>
+                  <Input type="date" value={reviewDeadline} onChange={(e) => setReviewDeadline(e.target.value)} className="mt-1" />
+                </div>
+                <div>
+                  <Label>Mín. avaliadores por proposta</Label>
+                  <Input type="number" value={minReviewers} onChange={(e) => setMinReviewers(Number(e.target.value))} min={1} max={10} className="mt-1" />
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Avaliação cega (blind review)</Label>
+                  <p className="text-xs text-muted-foreground">Ocultar identidade dos proponentes para avaliadores</p>
+                </div>
+                <input type="checkbox" checked={blindReview} onChange={(e) => setBlindReview(e.target.checked)} className="rounded" />
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={handleSaveDetails} disabled={saving}>
+                  {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                  <Save className="w-4 h-4 mr-2" /> Salvar Configurações
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
