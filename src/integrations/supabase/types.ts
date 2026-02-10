@@ -298,6 +298,44 @@ export type Database = {
           },
         ]
       }
+      form_question_options: {
+        Row: {
+          created_at: string
+          id: string
+          label: string
+          question_id: string
+          sort_order: number
+          updated_at: string
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label: string
+          question_id: string
+          sort_order?: number
+          updated_at?: string
+          value: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string
+          question_id?: string
+          sort_order?: number
+          updated_at?: string
+          value?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "form_question_options_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "form_questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       form_questions: {
         Row: {
           created_at: string
@@ -307,7 +345,9 @@ export type Database = {
           is_required: boolean
           label: string
           options: Json | null
+          options_source: string | null
           section: string
+          section_id: string | null
           sort_order: number
           type: string
           updated_at: string
@@ -321,7 +361,9 @@ export type Database = {
           is_required?: boolean
           label: string
           options?: Json | null
+          options_source?: string | null
           section?: string
+          section_id?: string | null
           sort_order?: number
           type?: string
           updated_at?: string
@@ -335,7 +377,9 @@ export type Database = {
           is_required?: boolean
           label?: string
           options?: Json | null
+          options_source?: string | null
           section?: string
+          section_id?: string | null
           sort_order?: number
           type?: string
           updated_at?: string
@@ -344,6 +388,134 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "form_questions_form_id_fkey"
+            columns: ["form_id"]
+            isOneToOne: false
+            referencedRelation: "edital_forms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "form_questions_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "form_sections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      form_response_drafts: {
+        Row: {
+          created_at: string
+          data: Json
+          edital_id: string
+          form_id: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          data?: Json
+          edital_id: string
+          form_id: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          edital_id?: string
+          form_id?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "form_response_drafts_edital_id_fkey"
+            columns: ["edital_id"]
+            isOneToOne: false
+            referencedRelation: "editais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "form_response_drafts_form_id_fkey"
+            columns: ["form_id"]
+            isOneToOne: false
+            referencedRelation: "edital_forms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      form_sections: {
+        Row: {
+          created_at: string
+          description: string | null
+          form_id: string
+          id: string
+          sort_order: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          form_id: string
+          id?: string
+          sort_order?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          form_id?: string
+          id?: string
+          sort_order?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "form_sections_form_id_fkey"
+            columns: ["form_id"]
+            isOneToOne: false
+            referencedRelation: "edital_forms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      form_versions: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          form_id: string
+          id: string
+          snapshot: Json
+          status: string
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          form_id: string
+          id?: string
+          snapshot: Json
+          status?: string
+          version?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          form_id?: string
+          id?: string
+          snapshot?: Json
+          status?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "form_versions_form_id_fkey"
             columns: ["form_id"]
             isOneToOne: false
             referencedRelation: "edital_forms"
