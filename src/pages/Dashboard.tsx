@@ -25,7 +25,7 @@ const Dashboard = () => {
   if (membership?.role === "proponente") return <Navigate to="/proponente" replace />;
   if (membership?.role === "reviewer") return <Navigate to="/reviewer" replace />;
 
-  // No role assigned yet — show profile link + waiting message
+  // No specific panel role — show welcome with profile prompt
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="text-center p-8 max-w-md space-y-4">
@@ -42,8 +42,7 @@ const Dashboard = () => {
         )}
 
         <p className="text-muted-foreground">
-          Sua conta ainda não está vinculada a nenhuma organização.
-          Complete seu cadastro pessoal enquanto aguarda.
+          Complete seu cadastro pessoal para participar dos editais.
         </p>
 
         <Link to="/profile">
