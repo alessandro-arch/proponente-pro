@@ -206,6 +206,55 @@ export type Database = {
           },
         ]
       }
+      identity_reveals: {
+        Row: {
+          edital_id: string
+          id: string
+          proposal_id: string
+          reason: string
+          revealed_at: string
+          revealed_by: string
+        }
+        Insert: {
+          edital_id: string
+          id?: string
+          proposal_id: string
+          reason: string
+          revealed_at?: string
+          revealed_by: string
+        }
+        Update: {
+          edital_id?: string
+          id?: string
+          proposal_id?: string
+          reason?: string
+          revealed_at?: string
+          revealed_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "identity_reveals_edital_id_fkey"
+            columns: ["edital_id"]
+            isOneToOne: false
+            referencedRelation: "editais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "identity_reveals_proposal_id_fkey"
+            columns: ["proposal_id"]
+            isOneToOne: false
+            referencedRelation: "proposals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "identity_reveals_proposal_id_fkey"
+            columns: ["proposal_id"]
+            isOneToOne: false
+            referencedRelation: "submissions_blind"
+            referencedColumns: ["submission_id"]
+          },
+        ]
+      }
       knowledge_areas: {
         Row: {
           created_at: string
@@ -427,6 +476,13 @@ export type Database = {
             referencedRelation: "proposals"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "proposal_answers_proposal_id_fkey"
+            columns: ["proposal_id"]
+            isOneToOne: true
+            referencedRelation: "submissions_blind"
+            referencedColumns: ["submission_id"]
+          },
         ]
       }
       proposal_decisions: {
@@ -462,6 +518,13 @@ export type Database = {
             referencedRelation: "proposals"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "proposal_decisions_proposal_id_fkey"
+            columns: ["proposal_id"]
+            isOneToOne: true
+            referencedRelation: "submissions_blind"
+            referencedColumns: ["submission_id"]
+          },
         ]
       }
       proposal_files: {
@@ -494,10 +557,18 @@ export type Database = {
             referencedRelation: "proposals"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "proposal_files_proposal_id_fkey"
+            columns: ["proposal_id"]
+            isOneToOne: false
+            referencedRelation: "submissions_blind"
+            referencedColumns: ["submission_id"]
+          },
         ]
       }
       proposals: {
         Row: {
+          blind_code: string | null
           created_at: string
           edital_id: string
           id: string
@@ -508,6 +579,7 @@ export type Database = {
           submitted_at: string | null
         }
         Insert: {
+          blind_code?: string | null
           created_at?: string
           edital_id: string
           id?: string
@@ -518,6 +590,7 @@ export type Database = {
           submitted_at?: string | null
         }
         Update: {
+          blind_code?: string | null
           created_at?: string
           edital_id?: string
           id?: string
@@ -586,6 +659,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "proposals"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "review_assignments_proposal_id_fkey"
+            columns: ["proposal_id"]
+            isOneToOne: false
+            referencedRelation: "submissions_blind"
+            referencedColumns: ["submission_id"]
           },
         ]
       }
@@ -677,6 +757,13 @@ export type Database = {
             referencedRelation: "proposals"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "reviews_proposal_id_fkey"
+            columns: ["proposal_id"]
+            isOneToOne: false
+            referencedRelation: "submissions_blind"
+            referencedColumns: ["submission_id"]
+          },
         ]
       }
       scoring_criteria: {
@@ -743,7 +830,38 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      submissions_blind: {
+        Row: {
+          blind_code: string | null
+          blind_review_enabled: boolean | null
+          created_at: string | null
+          edital_id: string | null
+          edital_title: string | null
+          knowledge_area_id: string | null
+          knowledge_area_name: string | null
+          proposal_content: Json | null
+          review_deadline: string | null
+          status: Database["public"]["Enums"]["proposal_status"] | null
+          submission_id: string | null
+          submitted_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "proposals_edital_id_fkey"
+            columns: ["edital_id"]
+            isOneToOne: false
+            referencedRelation: "editais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "proposals_knowledge_area_id_fkey"
+            columns: ["knowledge_area_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_areas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       ensure_default_membership: { Args: never; Returns: undefined }
