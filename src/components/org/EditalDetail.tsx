@@ -7,10 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, Send, Lock, Plus, FileText, Settings } from "lucide-react";
+import { Loader2, ArrowLeft, Send, Lock, Plus, FileText, Settings, Inbox } from "lucide-react";
 import FormKnowledgeAreas from "@/components/org/FormKnowledgeAreas";
 import FormSectionBuilder from "@/components/org/FormSectionBuilder";
 import FormPreview from "@/components/org/FormPreview";
+import SubmissionsList from "@/components/org/SubmissionsList";
 
 interface Edital {
   id: string;
@@ -131,6 +132,9 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
         <TabsList className="mb-6">
           <TabsTrigger value="overview">Visão Geral</TabsTrigger>
           <TabsTrigger value="form">Formulário</TabsTrigger>
+          <TabsTrigger value="submissions">
+            <Inbox className="w-4 h-4 mr-1" /> Submissões
+          </TabsTrigger>
           <TabsTrigger value="settings">Configurações</TabsTrigger>
         </TabsList>
 
@@ -214,6 +218,12 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
               <FormKnowledgeAreas formId={formId} />
             </div>
           )}
+        </TabsContent>
+
+
+        {/* Submissões */}
+        <TabsContent value="submissions">
+          <SubmissionsList editalId={edital.id} editalTitle={edital.title} />
         </TabsContent>
 
         {/* Configurações */}
