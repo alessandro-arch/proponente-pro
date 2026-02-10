@@ -48,7 +48,7 @@ const ReviewManagement = ({ editalId, editalTitle }: { editalId: string; editalT
     // Get all submitted proposals for this edital
     const { data: proposalsData } = await supabase
       .from("proposals")
-      .select("id, knowledge_area_id, knowledge_areas(name)")
+      .select("id, knowledge_area_id, blind_code, knowledge_areas(name)")
       .eq("edital_id", editalId)
       .eq("status", "submitted");
 
@@ -78,7 +78,7 @@ const ReviewManagement = ({ editalId, editalTitle }: { editalId: string; editalT
       .select("proposal_id, decision, justification, decided_at")
       .in("proposal_id", proposalIds);
 
-    const summaries: ProposalReviewSummary[] = proposalsData.map((p: any, index: number) => {
+    const summaries: ProposalReviewSummary[] = proposalsData.map((p: any) => {
       const assignments = (assignmentsData || []).filter((a: any) => a.proposal_id === p.id);
       const reviews = (reviewsData || []).filter((r: any) => r.proposal_id === p.id);
       const decisionEntry = (decisionsData || []).find((d: any) => d.proposal_id === p.id);
@@ -90,7 +90,7 @@ const ReviewManagement = ({ editalId, editalTitle }: { editalId: string; editalT
 
       return {
         proposal_id: p.id,
-        proposal_masked_id: `PROPOSTA-${String(index + 1).padStart(5, "0")}`,
+        proposal_masked_id: p.blind_code || `PROP-${p.id.slice(0, 8).toUpperCase()}`,
         knowledge_area: p.knowledge_areas?.name || null,
         total_assignments: assignments.length,
         submitted_count: assignments.filter((a: any) => a.status === "submitted").length,

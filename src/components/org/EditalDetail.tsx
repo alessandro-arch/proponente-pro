@@ -12,8 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, Save, Send, Lock, Plus, Trash2, GripVertical } from "lucide-react";
+import { Loader2, ArrowLeft, Save, Send, Lock, Plus, Trash2, GripVertical, ShieldCheck } from "lucide-react";
 import ReviewManagement from "@/components/org/ReviewManagement";
+import IdentityReveal from "@/components/org/IdentityReveal";
 
 interface Edital {
   id: string;
@@ -105,7 +106,7 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
       setLoadingProposals(true);
       const { data: propData } = await supabase
         .from("proposals")
-        .select("id, status, created_at, submitted_at, knowledge_areas(name)")
+        .select("id, status, created_at, submitted_at, blind_code, knowledge_areas(name)")
         .eq("edital_id", edital.id)
         .order("created_at", { ascending: false });
       setProposals(propData || []);
@@ -251,6 +252,7 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
           <TabsTrigger value="barema">Barema</TabsTrigger>
           <TabsTrigger value="proposals">Propostas</TabsTrigger>
           <TabsTrigger value="reviews">Avaliações</TabsTrigger>
+          <TabsTrigger value="identity">Identidade</TabsTrigger>
         </TabsList>
 
         {/* Details */}
@@ -426,10 +428,11 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
                 <p className="text-sm text-muted-foreground">Nenhuma proposta recebida.</p>
               ) : (
                 <div className="space-y-2">
-                  {proposals.map((p: any, i: number) => (
+                  {proposals.map((p: any) => (
                     <div key={p.id} className="flex items-center justify-between p-3 rounded-lg border border-border">
-                      <div className="space-y-0.5">
-                        <span className="font-mono text-sm font-bold text-primary">PROPOSTA-{String(i + 1).padStart(5, "0")}</span>
+                      <div className="space-y-0.5 flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-muted-foreground" />
+                        <span className="font-mono text-sm font-bold text-primary">{p.blind_code || p.id.slice(0, 8)}</span>
                         {p.knowledge_areas?.name && <span className="text-xs text-muted-foreground ml-2">{p.knowledge_areas.name}</span>}
                       </div>
                       <div className="flex items-center gap-2">
@@ -449,6 +452,20 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
         {/* Reviews */}
         <TabsContent value="reviews">
           <ReviewManagement editalId={edital.id} editalTitle={edital.title} />
+        </TabsContent>
+
+        {/* Identity Reveal */}
+        <TabsContent value="identity">
+          <IdentityReveal
+            editalId={edital.id}
+            editalTitle={edital.title}
+            editalStatus={status}
+            proposals={proposals.map((p: any) => ({
+              id: p.id,
+              blind_code: p.blind_code || p.id.slice(0, 8),
+              status: p.status,
+            }))}
+          />
         </TabsContent>
       </Tabs>
     </div>
