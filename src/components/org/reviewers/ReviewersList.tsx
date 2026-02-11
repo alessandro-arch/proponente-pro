@@ -14,6 +14,7 @@ import { ptBR } from "date-fns/locale";
 import NewReviewerModal from "./NewReviewerModal";
 import EditReviewerModal from "./EditReviewerModal";
 import DeleteReviewerDialog from "./DeleteReviewerDialog";
+import { formatInstitutionDisplay } from "@/components/InstitutionSelector";
 
 interface Props {
   orgId: string;
@@ -277,9 +278,13 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
                     <div className="min-w-0 hidden sm:block">
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <p className="text-xs text-muted-foreground truncate">{r.institution}</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {formatInstitutionDisplay(r.institution, (r as any).institution_custom_name ? (r as any).institution_sigla : null)}
+                          </p>
                         </TooltipTrigger>
-                        <TooltipContent side="top">{r.institution}</TooltipContent>
+                        <TooltipContent side="top">
+                          {formatInstitutionDisplay(r.institution, (r as any).institution_custom_name ? (r as any).institution_sigla : null)}
+                        </TooltipContent>
                       </Tooltip>
                     </div>
 

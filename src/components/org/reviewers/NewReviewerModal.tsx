@@ -55,6 +55,7 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
     institution_name: "",
     institution_custom_name: null as string | null,
     institution_type: null as string | null,
+    institution_sigla: null as string | null,
   });
 
   // Primary and secondary areas
@@ -76,7 +77,7 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
 
   const resetForm = () => {
     setForm({ full_name: "", email: "", cpf: "", inviteCode: generateInviteCode(), lattes_url: "", orcid: "", bio: "" });
-    setInstitution({ institution_id: null, institution_name: "", institution_custom_name: null, institution_type: null });
+    setInstitution({ institution_id: null, institution_name: "", institution_custom_name: null, institution_type: null, institution_sigla: null });
     setKeywords([]);
     setKeywordInput("");
     setPrimaryArea(null);
@@ -212,7 +213,8 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
     else { setCopiedLink(true); setTimeout(() => setCopiedLink(false), 2000); }
   };
 
-  const institutionValid = !!institution.institution_id || (!!institution.institution_custom_name?.trim() && !!institution.institution_type);
+  const customSiglaValid = institution.institution_sigla ? institution.institution_sigla.trim().length >= 2 && institution.institution_sigla.trim().length <= 10 : false;
+  const institutionValid = !!institution.institution_id || (!!institution.institution_custom_name?.trim() && !!institution.institution_type && customSiglaValid);
   const cpfClean = form.cpf.replace(/\D/g, "");
   const inviteCodeValid = form.inviteCode.length >= 6 && form.inviteCode.length <= 32;
   const isValid = form.full_name.trim() && form.email.trim() && cpfClean.length === 11 && institutionValid && !!primaryArea && !isDuplicate && inviteCodeValid;
@@ -293,7 +295,7 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
             label="Instituição de vínculo"
             required
             value={institution}
-            onChange={setInstitution}
+            onChange={(val) => setInstitution({ ...val, institution_sigla: val.institution_sigla ?? null })}
           />
 
           {/* Primary Area - Required */}

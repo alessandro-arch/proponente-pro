@@ -80,6 +80,7 @@ const EditReviewerModal = ({ open, onOpenChange, orgId, reviewer }: Props) => {
     institution_name: "",
     institution_custom_name: null as string | null,
     institution_type: null as string | null,
+    institution_sigla: null as string | null,
   });
   const [primaryArea, setPrimaryArea] = useState<string | null>(null);
   const [secondaryArea, setSecondaryArea] = useState<string | null>(null);
@@ -102,6 +103,7 @@ const EditReviewerModal = ({ open, onOpenChange, orgId, reviewer }: Props) => {
         institution_name: reviewer.institution || "",
         institution_custom_name: reviewer.institution_custom_name || null,
         institution_type: reviewer.institution_type || null,
+        institution_sigla: null,
       });
       setPrimaryArea(getPrimaryAreaValue(areas));
       setSecondaryArea(getSecondaryAreaValue(areas));
@@ -177,7 +179,8 @@ const EditReviewerModal = ({ open, onOpenChange, orgId, reviewer }: Props) => {
     onError: (err: any) => toast.error(err.message || "Erro ao atualizar avaliador."),
   });
 
-  const institutionValid = !!institution.institution_id || (!!institution.institution_custom_name?.trim() && !!institution.institution_type);
+  const customSiglaValid = institution.institution_sigla ? institution.institution_sigla.trim().length >= 2 && institution.institution_sigla.trim().length <= 10 : false;
+  const institutionValid = !!institution.institution_id || (!!institution.institution_custom_name?.trim() && !!institution.institution_type && customSiglaValid);
   const isValid = form.full_name.trim() && form.email.trim() && institutionValid && !!primaryArea && !isDuplicate;
 
   return (
@@ -204,7 +207,7 @@ const EditReviewerModal = ({ open, onOpenChange, orgId, reviewer }: Props) => {
             label="Instituição de vínculo"
             required
             value={institution}
-            onChange={setInstitution}
+            onChange={(val) => setInstitution({ ...val, institution_sigla: val.institution_sigla ?? null })}
           />
 
           <div className="space-y-1.5">

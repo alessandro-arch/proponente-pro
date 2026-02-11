@@ -11,6 +11,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import EditReviewerModal from "./EditReviewerModal";
 import DeleteReviewerDialog from "./DeleteReviewerDialog";
+import { formatInstitutionDisplay } from "@/components/InstitutionSelector";
 
 interface Props {
   reviewerId: string;
@@ -170,7 +171,9 @@ const ReviewerDetail = ({ reviewerId, orgId, onBack }: Props) => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-xs text-muted-foreground">Instituição</p>
-                <p className="text-sm font-medium">{reviewer.institution}</p>
+                <p className="text-sm font-medium">
+                  {formatInstitutionDisplay(reviewer.institution, (reviewer as any).institution_custom_name ? (reviewer as any).institution_sigla : null)}
+                </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">CPF</p>
