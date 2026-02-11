@@ -10,6 +10,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import SubmissionForm from "@/components/proponente/SubmissionForm";
+import { getComputedStatus, isSubmissionOpen, getStatusVariant } from "@/lib/edital-status";
 
 interface Props {
   orgId: string;
@@ -71,6 +72,7 @@ const EditaisAbertos = ({ orgId, userId, onStartProposal }: Props) => {
       <SubmissionForm
         editalId={selectedEdital.id}
         editalTitle={selectedEdital.title}
+        editalStartDate={selectedEdital.start_date}
         editalEndDate={selectedEdital.end_date}
         onBack={() => setSelectedEdital(null)}
       />
@@ -107,7 +109,8 @@ const EditaisAbertos = ({ orgId, userId, onStartProposal }: Props) => {
           {filtered.map((edital) => {
             const existingSub = submissionsByEdital.get(edital.id);
             const hasDraft = draftEditalIds.has(edital.id);
-            const isExpired = edital.end_date && new Date(edital.end_date) < new Date();
+            const computed = getComputedStatus(edital.status, edital.start_date, edital.end_date);
+            const open = isSubmissionOpen(edital.status, edital.start_date, edital.end_date);
             const isSubmitted = existingSub && existingSub.status === "submitted";
 
             return (
@@ -120,8 +123,11 @@ const EditaisAbertos = ({ orgId, userId, onStartProposal }: Props) => {
                         <CardDescription className="mt-1 line-clamp-2">{edital.description}</CardDescription>
                       )}
                     </div>
-                    {isExpired && !isSubmitted && <Badge variant="secondary">Encerrado</Badge>}
-                    {isSubmitted && <Badge variant="default">Submetida</Badge>}
+                    {isSubmitted ? (
+                      <Badge variant="default">Submetida</Badge>
+                    ) : (
+                      <Badge variant={getStatusVariant(computed)}>{computed}</Badge>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -130,13 +136,13 @@ const EditaisAbertos = ({ orgId, userId, onStartProposal }: Props) => {
                       {edital.start_date && (
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3.5 h-3.5" />
-                          Início: {format(new Date(edital.start_date), "dd/MM/yyyy", { locale: ptBR })}
+                          Abertura: {format(new Date(edital.start_date), "dd/MM/yyyy HH:mm", { locale: ptBR })}
                         </span>
                       )}
                       {edital.end_date && (
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3.5 h-3.5" />
-                          Fim: {format(new Date(edital.end_date), "dd/MM/yyyy", { locale: ptBR })}
+                          Encerramento: {format(new Date(edital.end_date), "dd/MM/yyyy HH:mm", { locale: ptBR })}
                         </span>
                       )}
                     </div>
@@ -145,15 +151,19 @@ const EditaisAbertos = ({ orgId, userId, onStartProposal }: Props) => {
                       <Button size="sm" variant="outline" onClick={() => setSelectedEdital(edital)}>
                         Visualizar proposta
                       </Button>
-                    ) : hasDraft ? (
+                    ) : hasDraft && open ? (
                       <Button size="sm" onClick={() => setSelectedEdital(edital)}>
                         Continuar rascunho <ArrowRight className="w-4 h-4 ml-1" />
                       </Button>
-                    ) : !isExpired ? (
+                    ) : open ? (
                       <Button size="sm" onClick={() => setSelectedEdital(edital)}>
                         Preencher proposta <ArrowRight className="w-4 h-4 ml-1" />
                       </Button>
-                    ) : null}
+                    ) : computed === "Agendado" ? (
+                      <span className="text-sm text-muted-foreground">Aguardando abertura</span>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">Período de submissão encerrado</span>
+                    )}
                   </div>
                 </CardContent>
               </Card>

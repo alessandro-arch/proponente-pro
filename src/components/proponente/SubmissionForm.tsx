@@ -19,6 +19,7 @@ import { Loader2, ArrowLeft, ArrowRight, Save, Send, AlertTriangle, CheckCircle2
 interface SubmissionFormProps {
   editalId: string;
   editalTitle: string;
+  editalStartDate: string | null;
   editalEndDate: string | null;
   onBack: () => void;
 }
@@ -48,7 +49,7 @@ interface SnapshotData {
   knowledge_areas: { id: string; name: string; code: string | null }[];
 }
 
-const SubmissionForm = ({ editalId, editalTitle, editalEndDate, onBack }: SubmissionFormProps) => {
+const SubmissionForm = ({ editalId, editalTitle, editalStartDate, editalEndDate, onBack }: SubmissionFormProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -64,7 +65,10 @@ const SubmissionForm = ({ editalId, editalTitle, editalEndDate, onBack }: Submis
   const [isSubmitted, setIsSubmitted] = useState(false);
   const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
 
-  const isExpired = editalEndDate ? new Date(editalEndDate) < new Date() : false;
+  const now = new Date();
+  const isBeforeStart = editalStartDate ? new Date(editalStartDate) > now : false;
+  const isAfterEnd = editalEndDate ? new Date(editalEndDate) < now : false;
+  const isClosed = isBeforeStart || isAfterEnd;
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -249,8 +253,8 @@ const SubmissionForm = ({ editalId, editalTitle, editalEndDate, onBack }: Submis
       return;
     }
 
-    if (isExpired) {
-      toast({ title: "Prazo encerrado", description: "Não é possível submeter após o prazo.", variant: "destructive" });
+    if (isClosed) {
+      toast({ title: "Período de submissão encerrado", description: "Não é possível submeter fora do período de abertura.", variant: "destructive" });
       setConfirmOpen(false);
       return;
     }
@@ -545,11 +549,11 @@ const SubmissionForm = ({ editalId, editalTitle, editalEndDate, onBack }: Submis
           <Badge variant="secondary" className="text-xs">Etapa 2 — Formulário</Badge>
         </div>
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={saveDraft} disabled={saving || isExpired}>
+          <Button size="sm" variant="outline" onClick={saveDraft} disabled={saving || isClosed}>
             {saving && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
             <Save className="w-4 h-4 mr-1" /> Salvar Rascunho
           </Button>
-          {!isExpired && (
+          {!isClosed && (
             <Button size="sm" onClick={() => setConfirmOpen(true)}>
               <Send className="w-4 h-4 mr-1" /> Enviar Proposta
             </Button>
@@ -565,10 +569,10 @@ const SubmissionForm = ({ editalId, editalTitle, editalEndDate, onBack }: Submis
         </p>
       </div>
 
-      {isExpired && (
+      {isClosed && (
         <div className="flex items-center gap-3 p-4 rounded-lg border border-destructive/30 bg-destructive/5">
           <AlertTriangle className="w-5 h-5 text-destructive shrink-0" />
-          <p className="text-sm text-destructive">O prazo para submissão deste edital já encerrou.</p>
+          <p className="text-sm text-destructive">{isBeforeStart ? "O período de submissão ainda não iniciou." : "Período de submissão encerrado."}</p>
         </div>
       )}
 

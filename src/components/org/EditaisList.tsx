@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus, ScrollText, Search } from "lucide-react";
 import EditalDetail from "@/components/org/EditalDetail";
+import { getComputedStatus, getStatusVariant } from "@/lib/edital-status";
 
 interface Edital {
   id: string;
@@ -37,6 +38,8 @@ const EditaisList = ({ orgId }: { orgId: string }) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [newStartDate, setNewStartDate] = useState("");
+  const [newEndDate, setNewEndDate] = useState("");
   const [selectedEdital, setSelectedEdital] = useState<Edital | null>(null);
 
   const fetchEditais = async () => {
@@ -53,11 +56,36 @@ const EditaisList = ({ orgId }: { orgId: string }) => {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim() || !user) return;
+    if (!user) return;
+
+    // Validate required fields
+    if (!newTitle.trim()) {
+      toast({ title: "Campo obrigatório", description: "Informe o título da chamada.", variant: "destructive" });
+      return;
+    }
+    if (!newDesc.trim()) {
+      toast({ title: "Campo obrigatório", description: "Informe a descrição da chamada.", variant: "destructive" });
+      return;
+    }
+    if (!newStartDate) {
+      toast({ title: "Campo obrigatório", description: "Informe a data de abertura.", variant: "destructive" });
+      return;
+    }
+    if (!newEndDate) {
+      toast({ title: "Campo obrigatório", description: "Informe a data de encerramento.", variant: "destructive" });
+      return;
+    }
+    if (new Date(newEndDate) <= new Date(newStartDate)) {
+      toast({ title: "Datas inválidas", description: "A data de encerramento deve ser posterior à de abertura.", variant: "destructive" });
+      return;
+    }
+
     setCreating(true);
     const { error } = await supabase.from("editais").insert({
       title: newTitle.trim(),
-      description: newDesc.trim() || null,
+      description: newDesc.trim(),
+      start_date: new Date(newStartDate).toISOString(),
+      end_date: new Date(newEndDate).toISOString(),
       organization_id: orgId,
       created_by: user.id,
     });
@@ -68,18 +96,21 @@ const EditaisList = ({ orgId }: { orgId: string }) => {
       toast({ title: "Edital criado!" });
       setNewTitle("");
       setNewDesc("");
+      setNewStartDate("");
+      setNewEndDate("");
       setDialogOpen(false);
       fetchEditais();
     }
   };
 
-  const statusBadge = (s: string) => {
-    switch (s) {
-      case "draft": return <Badge variant="outline">Rascunho</Badge>;
-      case "published": return <Badge className="bg-primary/10 text-primary border-primary/20">Publicado</Badge>;
-      case "closed": return <Badge variant="secondary">Encerrado</Badge>;
-      default: return <Badge variant="outline">{s}</Badge>;
-    }
+  const statusBadge = (e: Edital) => {
+    const computed = getComputedStatus(e.status, e.start_date, e.end_date);
+    const variant = getStatusVariant(computed);
+    return <Badge variant={variant}>{computed}</Badge>;
+  };
+
+  const formatDateTime = (dt: string) => {
+    return new Date(dt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
   };
 
   if (selectedEdital) {
@@ -94,17 +125,40 @@ const EditaisList = ({ orgId }: { orgId: string }) => {
           <DialogTrigger asChild>
             <Button><Plus className="w-4 h-4 mr-2" /> Novo Edital</Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-lg">
             <DialogHeader><DialogTitle>Criar Edital</DialogTitle></DialogHeader>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <Label>Título</Label>
-                <Input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Título do edital" className="mt-1" required />
+                <Label>Título da Chamada <span className="text-destructive">*</span></Label>
+                <Input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Título do edital" className="mt-1" />
               </div>
               <div>
-                <Label>Descrição</Label>
-                <Textarea value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="Descrição..." className="mt-1" rows={3} />
+                <Label>Descrição da Chamada <span className="text-destructive">*</span></Label>
+                <Textarea value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="Descreva brevemente o edital..." className="mt-1" rows={3} />
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Data de Abertura <span className="text-destructive">*</span></Label>
+                  <Input
+                    type="datetime-local"
+                    value={newStartDate}
+                    onChange={(e) => setNewStartDate(e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>Data de Encerramento <span className="text-destructive">*</span></Label>
+                  <Input
+                    type="datetime-local"
+                    value={newEndDate}
+                    onChange={(e) => setNewEndDate(e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+              {newStartDate && newEndDate && new Date(newEndDate) <= new Date(newStartDate) && (
+                <p className="text-sm text-destructive">A data de encerramento deve ser posterior à de abertura.</p>
+              )}
               <Button type="submit" className="w-full" disabled={creating}>
                 {creating && <Loader2 className="w-4 h-4 animate-spin mr-2" />} Criar
               </Button>
@@ -146,13 +200,13 @@ const EditaisList = ({ orgId }: { orgId: string }) => {
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-foreground">{e.title}</p>
-                    {statusBadge(e.status)}
+                    {statusBadge(e)}
                   </div>
                   {e.description && <p className="text-sm text-muted-foreground line-clamp-1">{e.description}</p>}
                   <p className="text-xs text-muted-foreground">
                     Criado em {new Date(e.created_at).toLocaleDateString("pt-BR")}
-                    {e.start_date && ` · Início: ${new Date(e.start_date).toLocaleDateString("pt-BR")}`}
-                    {e.end_date && ` · Fim: ${new Date(e.end_date).toLocaleDateString("pt-BR")}`}
+                    {e.start_date && ` · Abertura: ${formatDateTime(e.start_date)}`}
+                    {e.end_date && ` · Encerramento: ${formatDateTime(e.end_date)}`}
                   </p>
                 </div>
               </CardContent>
