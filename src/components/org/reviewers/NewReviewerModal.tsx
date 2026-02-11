@@ -30,6 +30,15 @@ function generateInviteCode(): string {
   }).join("-");
 }
 
+function parseAreaValue(value: string): { code: string; name: string } | null {
+  if (!value) return null;
+  const parts = value.split(" - ");
+  const code = parts[0]?.trim();
+  const name = parts.slice(1).join(" - ").trim();
+  if (!code) return null;
+  return { code, name: name || code };
+}
+
 const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({
@@ -47,15 +56,17 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
     institution_custom_name: null as string | null,
     institution_type: null as string | null,
   });
-  const [areas, setAreas] = useState<{ code: string; name: string }[]>([]);
-  const [currentArea, setCurrentArea] = useState<string | null>(null);
+
+  // Primary and secondary areas
+  const [primaryArea, setPrimaryArea] = useState<string | null>(null);
+  const [secondaryArea, setSecondaryArea] = useState<string | null>(null);
+
   const [keywords, setKeywords] = useState<string[]>([]);
   const [keywordInput, setKeywordInput] = useState("");
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [createdResult, setCreatedResult] = useState<{ code: string; link: string } | null>(null);
 
-  // Auto-generate invite code when modal opens
   useEffect(() => {
     if (open) {
       setForm(prev => ({ ...prev, inviteCode: generateInviteCode() }));
@@ -68,21 +79,10 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
     setInstitution({ institution_id: null, institution_name: "", institution_custom_name: null, institution_type: null });
     setKeywords([]);
     setKeywordInput("");
-    setCurrentArea(null);
+    setPrimaryArea(null);
+    setSecondaryArea(null);
     setCreatedResult(null);
   };
-
-  const addArea = (value: string) => {
-    if (!value) return;
-    const parts = value.split(" - ");
-    const code = parts[0]?.trim();
-    const name = parts.slice(1).join(" - ").trim();
-    if (areas.find((a) => a.code === code)) return;
-    setAreas([...areas, { code, name }]);
-    setCurrentArea(null);
-  };
-
-  const removeArea = (code: string) => setAreas(areas.filter((a) => a.code !== code));
 
   const addKeyword = () => {
     const kw = keywordInput.trim();
@@ -94,11 +94,9 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
 
   const hashCpf = async (cpf: string): Promise<string> => {
     const clean = cpf.replace(/\D/g, "");
-    const encoder = new TextEncoder();
-    const data = encoder.encode(clean);
+    const data = new TextEncoder().encode(clean);
     const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
   };
 
   const validateCpf = (cpf: string): boolean => {
@@ -124,16 +122,32 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
     return `${clean.slice(0, 3)}.${clean.slice(3, 6)}.${clean.slice(6, 9)}-${clean.slice(9)}`;
   };
 
+  // Build areas array from primary + secondary
+  const buildAreasArray = () => {
+    const result: { code: string; name: string; role: string }[] = [];
+    const p = parseAreaValue(primaryArea || "");
+    if (p) result.push({ ...p, role: "primary" });
+    const s = parseAreaValue(secondaryArea || "");
+    if (s) result.push({ ...s, role: "secondary" });
+    return result;
+  };
+
+  // Check for duplicate selection
+  const primaryParsed = parseAreaValue(primaryArea || "");
+  const secondaryParsed = parseAreaValue(secondaryArea || "");
+  const isDuplicate = primaryParsed && secondaryParsed && primaryParsed.code === secondaryParsed.code;
+
   const createMutation = useMutation({
     mutationFn: async () => {
       const email = form.email.toLowerCase().trim();
       const cpfClean = form.cpf.replace(/\D/g, "");
-
       if (!validateCpf(cpfClean)) throw new Error("CPF inválido.");
       if (form.inviteCode.length < 6) throw new Error("Código do convite deve ter pelo menos 6 caracteres.");
+      if (isDuplicate) throw new Error("Área principal e secundária não podem ser iguais.");
 
       const cpfHashed = await hashCpf(cpfClean);
       const cpfLast4 = cpfClean.slice(-4);
+      const areas = buildAreasArray();
 
       const { data: reviewer, error } = await supabase
         .from("reviewers")
@@ -163,7 +177,6 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
         throw error;
       }
 
-      // Audit log
       const { data: { user } } = await supabase.auth.getUser();
       await supabase.from("audit_logs").insert({
         user_id: user?.id,
@@ -174,7 +187,6 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
         metadata_json: { email, full_name: form.full_name.trim(), invite_code: form.inviteCode },
       });
 
-      // Send invite with generated code
       try {
         await supabase.functions.invoke("send-reviewer-invite", {
           body: { reviewerId: reviewer.id, orgId, inviteCode: form.inviteCode.trim() },
@@ -203,9 +215,8 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
   const institutionValid = !!institution.institution_id || (!!institution.institution_custom_name?.trim() && !!institution.institution_type);
   const cpfClean = form.cpf.replace(/\D/g, "");
   const inviteCodeValid = form.inviteCode.length >= 6 && form.inviteCode.length <= 32;
-  const isValid = form.full_name.trim() && form.email.trim() && cpfClean.length === 11 && institutionValid && areas.length > 0 && inviteCodeValid;
+  const isValid = form.full_name.trim() && form.email.trim() && cpfClean.length === 11 && institutionValid && !!primaryArea && !isDuplicate && inviteCodeValid;
 
-  // Success screen with code and link
   if (createdResult) {
     return (
       <Dialog open={open} onOpenChange={(v) => { if (!v) { resetForm(); } onOpenChange(v); }}>
@@ -285,26 +296,25 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
             onChange={setInstitution}
           />
 
+          {/* Primary Area - Required */}
           <div className="space-y-1.5">
-            <Label>Áreas do Conhecimento (CNPq) <span className="text-destructive">*</span></Label>
-            {areas.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mb-2">
-                {areas.map((a) => (
-                  <Badge key={a.code} variant="secondary" className="gap-1">
-                    {a.name || a.code}
-                    <button type="button" onClick={() => removeArea(a.code)}>
-                      <X className="w-3 h-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            )}
+            <Label>Área do Conhecimento Principal (CNPq) <span className="text-destructive">*</span></Label>
             <CnpqAreaSelector
-              value={currentArea}
-              onChange={(v) => {
-                addArea(v);
-              }}
+              value={primaryArea}
+              onChange={(v) => setPrimaryArea(v)}
             />
+          </div>
+
+          {/* Secondary Area - Optional */}
+          <div className="space-y-1.5">
+            <Label>Área do Conhecimento Secundária (CNPq)</Label>
+            <CnpqAreaSelector
+              value={secondaryArea}
+              onChange={(v) => setSecondaryArea(v)}
+            />
+            {isDuplicate && (
+              <p className="text-xs text-destructive">A área secundária não pode ser igual à principal.</p>
+            )}
           </div>
 
           <div className="space-y-1.5">
