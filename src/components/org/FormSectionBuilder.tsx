@@ -62,6 +62,7 @@ const QUESTION_TYPES = [
   { value: "file", label: "Upload de arquivo" },
   { value: "single_select", label: "Seleção única" },
   { value: "multi_select", label: "Seleção múltipla" },
+  { value: "budget", label: "Orçamento por Rubricas" },
 ];
 
 interface FormSectionBuilderProps {
