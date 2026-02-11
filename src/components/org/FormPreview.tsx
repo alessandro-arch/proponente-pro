@@ -57,18 +57,33 @@ const FormPreview = ({ formId, editalId, onBack }: FormPreviewProps) => {
   const loadPreview = useCallback(async () => {
     setLoading(true);
 
-    // Try published version first
-    const { data: versions } = await supabase
-      .from("form_versions")
-      .select("snapshot")
-      .eq("form_id", formId)
-      .order("version", { ascending: false })
-      .limit(1);
+    // Check form status first
+    const { data: formData } = await supabase
+      .from("edital_forms")
+      .select("status")
+      .eq("id", formId)
+      .single();
 
-    if (versions && versions.length > 0) {
-      setSnapshot((versions[0] as any).snapshot as SnapshotData);
-      setSource("published");
-    } else {
+    const isDraft = !formData || formData.status === "draft";
+
+    // Try published version only if form is published
+    let usedPublished = false;
+    if (!isDraft) {
+      const { data: versions } = await supabase
+        .from("form_versions")
+        .select("snapshot")
+        .eq("form_id", formId)
+        .order("version", { ascending: false })
+        .limit(1);
+
+      if (versions && versions.length > 0) {
+        setSnapshot((versions[0] as any).snapshot as SnapshotData);
+        setSource("published");
+        usedPublished = true;
+      }
+    }
+
+    if (!usedPublished) {
       // Build from draft
       const [secRes, qRes, kaRes] = await Promise.all([
         supabase.from("form_sections").select("*").eq("form_id", formId).order("sort_order"),
@@ -110,7 +125,7 @@ const FormPreview = ({ formId, editalId, onBack }: FormPreviewProps) => {
       };
       setSnapshot(snap);
       setSource("draft");
-    }
+    } // end !usedPublished
 
     // Load existing draft answers
     if (user) {

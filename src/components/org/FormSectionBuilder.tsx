@@ -711,6 +711,15 @@ const FormSectionBuilder = ({ formId, formStatus, editalId, onStatusChange, onPr
               </>
             )}
 
+            {/* Budget info */}
+            {qType === "budget" && (
+              <div className="rounded-lg border border-border p-3 bg-muted/30">
+                <p className="text-sm text-muted-foreground">
+                  Este campo renderiza automaticamente o módulo de orçamento por rubricas (Diárias, Passagens Aéreas, Material de Consumo, Serviços de Terceiros, Materiais Permanentes e Bolsas).
+                </p>
+              </div>
+            )}
+
             {/* Select options */}
             {isSelectType && (
               <>
