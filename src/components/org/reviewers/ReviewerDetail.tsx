@@ -144,6 +144,12 @@ const ReviewerDetail = ({ reviewerId, orgId, onBack }: Props) => {
                 <p className="text-sm font-medium">{reviewer.institution}</p>
               </div>
               <div>
+                <p className="text-xs text-muted-foreground">CPF</p>
+                <p className="text-sm font-medium">
+                  {(reviewer as any).cpf_last4 ? `***.***.*${(reviewer as any).cpf_last4.slice(0, 2)}-${(reviewer as any).cpf_last4.slice(2)}` : "—"}
+                </p>
+              </div>
+              <div>
                 <p className="text-xs text-muted-foreground">ORCID</p>
                 <p className="text-sm font-medium">{reviewer.orcid || "—"}</p>
               </div>
