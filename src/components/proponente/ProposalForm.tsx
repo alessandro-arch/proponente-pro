@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { TextFieldWithCounter } from "@/components/ui/text-field-with-counter";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -22,10 +23,12 @@ interface Props {
 
 interface FormField {
   id: string;
-  type: "short_text" | "long_text" | "number" | "select" | "file";
+  type: "short_text" | "long_text" | "text" | "number" | "select" | "file";
   label: string;
   required?: boolean;
   options?: string[];
+  min_chars?: number;
+  max_chars?: number;
 }
 
 const ProposalForm = ({ proposalId, editalId, orgId, userId, readOnly }: Props) => {
@@ -262,18 +265,12 @@ const ProposalForm = ({ proposalId, editalId, orgId, userId, readOnly }: Props) 
                   {field.required && <span className="text-destructive ml-1">*</span>}
                 </Label>
 
-                {field.type === "short_text" && (
-                  <Input
+                {(field.type === "short_text" || field.type === "long_text" || field.type === "text") && (
+                  <TextFieldWithCounter
                     value={answers[field.id] ?? ""}
-                    onChange={(e) => updateAnswer(field.id, e.target.value)}
-                    disabled={readOnly}
-                  />
-                )}
-                {field.type === "long_text" && (
-                  <Textarea
-                    value={answers[field.id] ?? ""}
-                    onChange={(e) => updateAnswer(field.id, e.target.value)}
-                    rows={4}
+                    onChange={(v) => updateAnswer(field.id, v)}
+                    maxChars={(field as any).max_chars || 5000}
+                    minChars={(field as any).min_chars}
                     disabled={readOnly}
                   />
                 )}
