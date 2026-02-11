@@ -2365,6 +2365,10 @@ export type Database = {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
       }
+      is_reviewer_assigned: {
+        Args: { _proposal_id: string; _user_id: string }
+        Returns: boolean
+      }
       lookup_email_by_cpf_hash: {
         Args: { p_cpf_hash: string }
         Returns: string
