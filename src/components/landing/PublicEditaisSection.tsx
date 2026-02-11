@@ -21,9 +21,9 @@ const PublicEditaisSection = () => {
         .eq("is_public", true)
         .eq("status", "published")
         .is("deleted_at", null)
-        .lte("start_date", now)
-        .gte("end_date", now)
-        .order("end_date", { ascending: true })
+        .or(`start_date.is.null,start_date.lte.${now}`)
+        .or(`end_date.is.null,end_date.gte.${now}`)
+        .order("end_date", { ascending: true, nullsFirst: false })
         .limit(6);
       if (error) throw error;
       return data;
