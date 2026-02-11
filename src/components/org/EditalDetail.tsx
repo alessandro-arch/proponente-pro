@@ -7,8 +7,9 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, Send, Lock, Plus, FileText, Settings, Inbox, ClipboardCheck } from "lucide-react";
+import { Loader2, ArrowLeft, Send, Lock, Plus, FileText, Settings, Inbox, ClipboardCheck, AlertTriangle } from "lucide-react";
 import FormKnowledgeAreas from "@/components/org/FormKnowledgeAreas";
 import FormSectionBuilder from "@/components/org/FormSectionBuilder";
 import FormPreview from "@/components/org/FormPreview";
@@ -32,7 +33,7 @@ interface Edital {
 }
 
 const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string; onBack: () => void }) => {
-  const { user } = useAuth();
+  const { user, globalRole, membership } = useAuth();
   const { toast } = useToast();
   const [dbStatus, setDbStatus] = useState(edital.status);
   const [startDate, setStartDate] = useState(edital.start_date);
@@ -40,6 +41,7 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
   const [editingDates, setEditingDates] = useState(false);
   const [tempStart, setTempStart] = useState("");
   const [tempEnd, setTempEnd] = useState("");
+  const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
 
   // Form state
   const [formId, setFormId] = useState<string | null>(null);
@@ -47,9 +49,15 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
   const [loadingForm, setLoadingForm] = useState(true);
   const [creatingForm, setCreatingForm] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   const computedStatus = getComputedStatus(dbStatus, startDate, endDate);
-  const canEditDates = computedStatus === "Agendado" || computedStatus === "Rascunho";
+  const isEncerrado = computedStatus === "Encerrado";
+  const isRascunho = computedStatus === "Rascunho";
+  const isGestorMaster = globalRole === "icca_admin" || membership?.role === "org_admin";
+  
+  // Dates editable: Rascunho/Agendado by anyone with access, or Published by Gestor Master only
+  const canEditDates = isRascunho || computedStatus === "Agendado" || (dbStatus === "published" && isGestorMaster);
 
   useEffect(() => {
     loadForm();
@@ -89,28 +97,77 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
     }
   };
 
-  const handleStatusChange = async (newStatus: string) => {
-    // Validate dates before publishing
-    if (newStatus === "published") {
-      if (!startDate || !endDate) {
-        toast({ title: "Datas obrigatórias", description: "Defina as datas de abertura e encerramento antes de publicar.", variant: "destructive" });
-        return;
-      }
-      if (new Date(endDate) <= new Date(startDate)) {
-        toast({ title: "Datas inválidas", description: "A data de encerramento deve ser posterior à de abertura.", variant: "destructive" });
-        return;
-      }
+  const handlePublishEdital = async () => {
+    // 1. Validate required fields
+    if (!edital.title?.trim()) {
+      toast({ title: "Título obrigatório", description: "O edital precisa de um título.", variant: "destructive" });
+      return;
+    }
+    if (!edital.description?.trim()) {
+      toast({ title: "Descrição obrigatória", description: "O edital precisa de uma descrição.", variant: "destructive" });
+      return;
+    }
+    // 2. Validate dates
+    if (!startDate || !endDate) {
+      toast({ title: "Datas obrigatórias", description: "Defina as datas de abertura e encerramento antes de publicar.", variant: "destructive" });
+      return;
+    }
+    if (new Date(endDate) <= new Date(startDate)) {
+      toast({ title: "Datas inválidas", description: "A data de encerramento deve ser posterior à de abertura.", variant: "destructive" });
+      return;
+    }
+    // 3. Validate form has at least 1 section + 1 question
+    if (!formId) {
+      toast({ title: "Formulário necessário", description: "Crie e configure o formulário antes de publicar.", variant: "destructive" });
+      return;
     }
 
+    setPublishing(true);
+    const [secRes, qRes] = await Promise.all([
+      supabase.from("form_sections").select("id").eq("form_id", formId),
+      supabase.from("form_questions").select("id").eq("form_id", formId),
+    ]);
+    
+    if (!secRes.data || secRes.data.length === 0) {
+      toast({ title: "Formulário incompleto", description: "Adicione pelo menos 1 seção ao formulário.", variant: "destructive" });
+      setPublishing(false);
+      return;
+    }
+    if (!qRes.data || qRes.data.length === 0) {
+      toast({ title: "Formulário incompleto", description: "Adicione pelo menos 1 pergunta ao formulário.", variant: "destructive" });
+      setPublishing(false);
+      return;
+    }
+
+    // 4. Update status + published_at
     const { error } = await supabase
       .from("editais")
-      .update({ status: newStatus as "draft" | "published" | "closed" })
+      .update({ 
+        status: "published" as "draft" | "published" | "closed",
+        published_at: new Date().toISOString(),
+      } as any)
       .eq("id", edital.id);
+    
+    setPublishing(false);
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     } else {
-      setDbStatus(newStatus);
-      toast({ title: `Edital ${newStatus === "published" ? "publicado" : newStatus === "closed" ? "encerrado" : "revertido"}!` });
+      setDbStatus("published");
+      toast({ title: "Edital publicado com sucesso!" });
+    }
+  };
+
+  const handleCloseEdital = async () => {
+    const { error } = await supabase
+      .from("editais")
+      .update({ status: "closed" as "draft" | "published" | "closed" })
+      .eq("id", edital.id);
+    setConfirmCloseOpen(false);
+    if (error) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    } else {
+      setDbStatus("closed");
+      toast({ title: "Edital encerrado! Submissões bloqueadas." });
     }
   };
 
@@ -161,16 +218,22 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
             <Badge variant={getStatusVariant(computedStatus)}>
               {computedStatus}
             </Badge>
+            {isEncerrado && (
+              <span className="text-xs text-muted-foreground">(somente leitura)</span>
+            )}
           </div>
         </div>
         <div className="flex gap-2">
+          {/* Rascunho: Publicar */}
           {dbStatus === "draft" && (
-            <Button size="sm" onClick={() => handleStatusChange("published")}>
+            <Button size="sm" onClick={handlePublishEdital} disabled={publishing}>
+              {publishing && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
               <Send className="w-4 h-4 mr-1" /> Publicar
             </Button>
           )}
+          {/* Publicado (não encerrado por data): Encerrar */}
           {dbStatus === "published" && computedStatus !== "Encerrado" && (
-            <Button size="sm" variant="secondary" onClick={() => handleStatusChange("closed")}>
+            <Button size="sm" variant="secondary" onClick={() => setConfirmCloseOpen(true)}>
               <Lock className="w-4 h-4 mr-1" /> Encerrar
             </Button>
           )}
@@ -181,16 +244,23 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
       <Tabs defaultValue="overview">
         <TabsList className="mb-6">
           <TabsTrigger value="overview">Visão Geral</TabsTrigger>
-          <TabsTrigger value="form">Formulário</TabsTrigger>
+          {/* Rascunho: Configurar Formulário */}
+          <TabsTrigger value="form">
+            {isRascunho ? "Configurar Formulário" : "Formulário"}
+          </TabsTrigger>
           <TabsTrigger value="submissions">
             <Inbox className="w-4 h-4 mr-1" /> Submissões
           </TabsTrigger>
-          <TabsTrigger value="reviews">
-            <ClipboardCheck className="w-4 h-4 mr-1" /> Avaliação
-          </TabsTrigger>
-          <TabsTrigger value="settings">
-            <Settings className="w-4 h-4 mr-1" /> Configurações
-          </TabsTrigger>
+          {!isRascunho && (
+            <TabsTrigger value="reviews">
+              <ClipboardCheck className="w-4 h-4 mr-1" /> Avaliação
+            </TabsTrigger>
+          )}
+          {!isEncerrado && (
+            <TabsTrigger value="settings">
+              <Settings className="w-4 h-4 mr-1" /> Configurações
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* Visão Geral */}
@@ -229,8 +299,8 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
                 </div>
               </div>
 
-              {/* Edit dates - only when Agendado or Rascunho */}
-              {canEditDates && (
+              {/* Edit dates */}
+              {canEditDates && !isEncerrado && (
                 <div className="pt-2">
                   {!editingDates ? (
                     <Button size="sm" variant="outline" onClick={() => {
@@ -269,6 +339,12 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
 
         {/* Formulário */}
         <TabsContent value="form">
+          {isEncerrado && (
+            <div className="flex items-center gap-3 p-4 rounded-lg border border-muted bg-muted/30 mb-4">
+              <AlertTriangle className="w-5 h-5 text-muted-foreground shrink-0" />
+              <p className="text-sm text-muted-foreground">Edital encerrado — formulário em modo somente leitura.</p>
+            </div>
+          )}
           {loadingForm ? (
             <div className="flex justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -279,10 +355,12 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
                 <CardContent className="py-12 text-center">
                   <FileText className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                   <p className="text-muted-foreground mb-4">Nenhum formulário criado para este edital.</p>
-                  <Button onClick={handleCreateForm} disabled={creatingForm}>
-                    {creatingForm && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                    <Plus className="w-4 h-4 mr-2" /> Criar Formulário
-                  </Button>
+                  {!isEncerrado && (
+                    <Button onClick={handleCreateForm} disabled={creatingForm}>
+                      {creatingForm && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                      <Plus className="w-4 h-4 mr-2" /> Criar Formulário
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
               <FormKnowledgeAreas formId={null} />
@@ -295,6 +373,7 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
                 formId={formId}
                 formStatus={formStatus}
                 editalId={edital.id}
+                editalDbStatus={dbStatus}
                 onStatusChange={(s) => setFormStatus(s)}
                 onPreview={() => setShowPreview(true)}
               />
@@ -309,23 +388,45 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
         </TabsContent>
 
         {/* Avaliação */}
-        <TabsContent value="reviews">
-          <ReviewManagement editalId={edital.id} editalTitle={edital.title} />
-        </TabsContent>
+        {!isRascunho && (
+          <TabsContent value="reviews">
+            <ReviewManagement editalId={edital.id} editalTitle={edital.title} />
+          </TabsContent>
+        )}
 
         {/* Configurações */}
-        <TabsContent value="settings">
-          <div className="space-y-6">
-            <ScoringCriteriaManager editalId={edital.id} />
-            <IdentityReveal
-              editalId={edital.id}
-              editalTitle={edital.title}
-              editalStatus={dbStatus}
-              proposals={[]}
-            />
-          </div>
-        </TabsContent>
+        {!isEncerrado && (
+          <TabsContent value="settings">
+            <div className="space-y-6">
+              <ScoringCriteriaManager editalId={edital.id} />
+              <IdentityReveal
+                editalId={edital.id}
+                editalTitle={edital.title}
+                editalStatus={dbStatus}
+                proposals={[]}
+              />
+            </div>
+          </TabsContent>
+        )}
       </Tabs>
+
+      {/* Confirm close dialog */}
+      <Dialog open={confirmCloseOpen} onOpenChange={setConfirmCloseOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Encerrar Edital</DialogTitle>
+            <DialogDescription>
+              Ao encerrar, novas submissões serão <strong>bloqueadas imediatamente</strong>. O edital ficará em modo somente leitura. Esta ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setConfirmCloseOpen(false)}>Cancelar</Button>
+            <Button variant="destructive" onClick={handleCloseEdital}>
+              <Lock className="w-4 h-4 mr-1" /> Confirmar encerramento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

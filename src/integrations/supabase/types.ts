@@ -212,6 +212,7 @@ export type Database = {
           id: string
           min_reviewers_per_proposal: number | null
           organization_id: string
+          published_at: string | null
           review_deadline: string | null
           start_date: string | null
           status: Database["public"]["Enums"]["edital_status"]
@@ -227,6 +228,7 @@ export type Database = {
           id?: string
           min_reviewers_per_proposal?: number | null
           organization_id: string
+          published_at?: string | null
           review_deadline?: string | null
           start_date?: string | null
           status?: Database["public"]["Enums"]["edital_status"]
@@ -242,6 +244,7 @@ export type Database = {
           id?: string
           min_reviewers_per_proposal?: number | null
           organization_id?: string
+          published_at?: string | null
           review_deadline?: string | null
           start_date?: string | null
           status?: Database["public"]["Enums"]["edital_status"]
