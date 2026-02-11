@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Loader2, Search, Eye, Download, FileText, ArrowLeft, Users } from "lucide-react";
 import ReviewerAssignment from "@/components/org/ReviewerAssignment";
 import { generateProposalPdf } from "@/lib/generate-proposal-pdf";
+import { generateSubmissionReceipt } from "@/lib/generate-submission-receipt";
 
 interface SubmissionsListProps {
   editalId: string;
@@ -187,6 +188,19 @@ const SubmissionsList = ({ editalId, editalTitle, orgId }: SubmissionsListProps)
                 });
               }}>
                 <Download className="w-4 h-4 mr-1" /> Baixar PDF
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => {
+                generateSubmissionReceipt({
+                  protocol: selectedSubmission.protocol || "—",
+                  editalTitle: editalTitle,
+                  proponenteName: (profile as any)?.full_name || "—",
+                  proponenteEmail: (profile as any)?.email || "—",
+                  cnpqArea: selectedSubmission.cnpq_area_code || undefined,
+                  submittedAt: selectedSubmission.submitted_at ? new Date(selectedSubmission.submitted_at).toLocaleString("pt-BR") : "—",
+                  submissionId: selectedSubmission.id,
+                });
+              }}>
+                <FileText className="w-4 h-4 mr-1" /> Baixar Recibo
               </Button>
               <Button size="sm" variant="secondary" onClick={() => {
                 // Find proposal for this submission
