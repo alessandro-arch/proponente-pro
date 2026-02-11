@@ -1098,6 +1098,7 @@ export type Database = {
           id: string
           organization_id: string
           role: Database["public"]["Enums"]["app_role"]
+          status: string
           user_id: string
         }
         Insert: {
@@ -1105,6 +1106,7 @@ export type Database = {
           id?: string
           organization_id: string
           role?: Database["public"]["Enums"]["app_role"]
+          status?: string
           user_id: string
         }
         Update: {
@@ -1112,6 +1114,7 @@ export type Database = {
           id?: string
           organization_id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          status?: string
           user_id?: string
         }
         Relationships: [
@@ -1830,6 +1833,7 @@ export type Database = {
           id: string
           org_id: string
           reviewer_id: string
+          user_id: string | null
         }
         Insert: {
           conflict_type?: string
@@ -1839,6 +1843,7 @@ export type Database = {
           id?: string
           org_id: string
           reviewer_id: string
+          user_id?: string | null
         }
         Update: {
           conflict_type?: string
@@ -1848,6 +1853,7 @@ export type Database = {
           id?: string
           org_id?: string
           reviewer_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -1868,39 +1874,73 @@ export type Database = {
       }
       reviewer_invites: {
         Row: {
+          areas: Json | null
           created_at: string
           email: string
           expires_at: string
+          full_name: string | null
           id: string
+          institution: string | null
+          institution_custom_name: string | null
+          institution_id: string | null
+          institution_type: string | null
           invite_code: string | null
+          keywords: string[] | null
+          lattes_url: string | null
+          orcid: string | null
           org_id: string
-          reviewer_id: string
+          reviewer_id: string | null
           token_hash: string | null
           used_at: string | null
         }
         Insert: {
+          areas?: Json | null
           created_at?: string
           email: string
           expires_at: string
+          full_name?: string | null
           id?: string
+          institution?: string | null
+          institution_custom_name?: string | null
+          institution_id?: string | null
+          institution_type?: string | null
           invite_code?: string | null
+          keywords?: string[] | null
+          lattes_url?: string | null
+          orcid?: string | null
           org_id: string
-          reviewer_id: string
+          reviewer_id?: string | null
           token_hash?: string | null
           used_at?: string | null
         }
         Update: {
+          areas?: Json | null
           created_at?: string
           email?: string
           expires_at?: string
+          full_name?: string | null
           id?: string
+          institution?: string | null
+          institution_custom_name?: string | null
+          institution_id?: string | null
+          institution_type?: string | null
           invite_code?: string | null
+          keywords?: string[] | null
+          lattes_url?: string | null
+          orcid?: string | null
           org_id?: string
-          reviewer_id?: string
+          reviewer_id?: string | null
           token_hash?: string | null
           used_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "reviewer_invites_institution_id_fkey"
+            columns: ["institution_id"]
+            isOneToOne: false
+            referencedRelation: "institutions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "reviewer_invites_org_id_fkey"
             columns: ["org_id"]
@@ -1913,6 +1953,59 @@ export type Database = {
             columns: ["reviewer_id"]
             isOneToOne: false
             referencedRelation: "reviewers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reviewer_profiles: {
+        Row: {
+          accepted_at: string | null
+          areas: Json
+          bio: string | null
+          created_at: string
+          first_terms_accepted_at: string | null
+          id: string
+          keywords: string[] | null
+          orcid: string | null
+          org_id: string
+          terms_version: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          areas?: Json
+          bio?: string | null
+          created_at?: string
+          first_terms_accepted_at?: string | null
+          id?: string
+          keywords?: string[] | null
+          orcid?: string | null
+          org_id: string
+          terms_version?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          accepted_at?: string | null
+          areas?: Json
+          bio?: string | null
+          created_at?: string
+          first_terms_accepted_at?: string | null
+          id?: string
+          keywords?: string[] | null
+          orcid?: string | null
+          org_id?: string
+          terms_version?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reviewer_profiles_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
