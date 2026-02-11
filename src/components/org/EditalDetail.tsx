@@ -16,6 +16,7 @@ import FormSectionBuilder from "@/components/org/FormSectionBuilder";
 import FormPreview from "@/components/org/FormPreview";
 import SubmissionsList from "@/components/org/SubmissionsList";
 import ReviewManagement from "@/components/org/ReviewManagement";
+import ProposalDistribution from "@/components/org/ProposalDistribution";
 import ScoringCriteriaManager from "@/components/org/ScoringCriteriaManager";
 import IdentityReveal from "@/components/org/IdentityReveal";
 import FormSelector from "@/components/org/FormSelector";
@@ -518,7 +519,40 @@ const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; 
         {/* Avaliação */}
         {showReviewsTab && (
           <TabsContent value="reviews">
-            <ReviewManagement editalId={edital.id} editalTitle={edital.title} />
+            <Tabs defaultValue="distribution">
+              <TabsList className="mb-4">
+                <TabsTrigger value="distribution">Distribuição</TabsTrigger>
+                <TabsTrigger value="tracking">Acompanhamento</TabsTrigger>
+                <TabsTrigger value="consolidation">Consolidação</TabsTrigger>
+                <TabsTrigger value="final">Parecer Final</TabsTrigger>
+              </TabsList>
+              <TabsContent value="distribution">
+                <ProposalDistribution
+                  editalId={edital.id}
+                  orgId={orgId}
+                  minReviewers={edital.min_reviewers_per_proposal || 2}
+                />
+              </TabsContent>
+              <TabsContent value="tracking">
+                <ReviewManagement editalId={edital.id} editalTitle={edital.title} />
+              </TabsContent>
+              <TabsContent value="consolidation">
+                <Card>
+                  <CardContent className="py-12 text-center">
+                    <ClipboardCheck className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">Consolidação de avaliações será implementada na próxima iteração.</p>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+              <TabsContent value="final">
+                <Card>
+                  <CardContent className="py-12 text-center">
+                    <ClipboardCheck className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">Parecer final será implementado na próxima iteração.</p>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
           </TabsContent>
         )}
 
@@ -526,6 +560,29 @@ const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; 
         {showSettingsTab && (
           <TabsContent value="settings">
             <div className="space-y-6">
+              {/* Min reviewers config */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Avaliação</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="max-w-xs">
+                    <Label>Mínimo de avaliadores por proposta</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={10}
+                      defaultValue={edital.min_reviewers_per_proposal || 2}
+                      onChange={async (e) => {
+                        const val = Math.min(10, Math.max(1, parseInt(e.target.value) || 2));
+                        await supabase.from("editais").update({ min_reviewers_per_proposal: val }).eq("id", edital.id);
+                      }}
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">De 1 a 10. Governa a distribuição e alertas.</p>
+                  </div>
+                </CardContent>
+              </Card>
               <ScoringCriteriaManager editalId={edital.id} />
               <IdentityReveal
                 editalId={edital.id}
