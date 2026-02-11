@@ -215,6 +215,7 @@ export type Database = {
           end_date: string | null
           form_id: string | null
           id: string
+          is_public: boolean
           min_reviewers_per_proposal: number | null
           organization_id: string
           published_at: string | null
@@ -236,6 +237,7 @@ export type Database = {
           end_date?: string | null
           form_id?: string | null
           id?: string
+          is_public?: boolean
           min_reviewers_per_proposal?: number | null
           organization_id: string
           published_at?: string | null
@@ -257,6 +259,7 @@ export type Database = {
           end_date?: string | null
           form_id?: string | null
           id?: string
+          is_public?: boolean
           min_reviewers_per_proposal?: number | null
           organization_id?: string
           published_at?: string | null
