@@ -44,7 +44,7 @@ const EditaisList = ({ orgId }: { orgId: string }) => {
 
   const fetchEditais = async () => {
     setLoading(true);
-    let query = supabase.from("editais").select("*").eq("organization_id", orgId).order("created_at", { ascending: false });
+    let query = supabase.from("editais").select("*").eq("organization_id", orgId).is("deleted_at", null).order("created_at", { ascending: false });
     if (filter !== "all") query = query.eq("status", filter as "draft" | "published" | "closed");
     if (search.trim()) query = query.ilike("title", `%${search.trim()}%`);
     const { data } = await query;

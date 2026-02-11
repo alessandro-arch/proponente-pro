@@ -30,6 +30,7 @@ const EditaisAbertos = ({ orgId, userId, onStartProposal }: Props) => {
         .select("*")
         .eq("organization_id", orgId)
         .eq("status", "published")
+        .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;

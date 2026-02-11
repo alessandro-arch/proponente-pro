@@ -207,6 +207,7 @@ export type Database = {
           blind_review_enabled: boolean
           created_at: string
           created_by: string
+          deleted_at: string | null
           description: string | null
           end_date: string | null
           id: string
@@ -223,6 +224,7 @@ export type Database = {
           blind_review_enabled?: boolean
           created_at?: string
           created_by: string
+          deleted_at?: string | null
           description?: string | null
           end_date?: string | null
           id?: string
@@ -239,6 +241,7 @@ export type Database = {
           blind_review_enabled?: boolean
           created_at?: string
           created_by?: string
+          deleted_at?: string | null
           description?: string | null
           end_date?: string | null
           id?: string

@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, Send, Lock, Plus, FileText, Settings, Inbox, ClipboardCheck, AlertTriangle } from "lucide-react";
+import { Loader2, ArrowLeft, Send, Lock, Plus, FileText, Settings, Inbox, ClipboardCheck, AlertTriangle, Trash2, RotateCcw } from "lucide-react";
 import FormKnowledgeAreas from "@/components/org/FormKnowledgeAreas";
 import FormSectionBuilder from "@/components/org/FormSectionBuilder";
 import FormPreview from "@/components/org/FormPreview";
@@ -42,6 +42,11 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
   const [tempStart, setTempStart] = useState("");
   const [tempEnd, setTempEnd] = useState("");
   const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [confirmReopenOpen, setConfirmReopenOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [reopening, setReopening] = useState(false);
+  const [reopenEndDate, setReopenEndDate] = useState("");
 
   // Form state
   const [formId, setFormId] = useState<string | null>(null);
@@ -171,6 +176,61 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
     }
   };
 
+  const handleDeleteEdital = async () => {
+    const { count } = await supabase
+      .from("edital_submissions")
+      .select("id", { count: "exact", head: true })
+      .eq("edital_id", edital.id)
+      .eq("status", "submitted");
+    if (count && count > 0) {
+      toast({ title: "Não é possível excluir", description: "Este edital possui inscrições submetidas.", variant: "destructive" });
+      setConfirmDeleteOpen(false);
+      return;
+    }
+    setDeleting(true);
+    const { error } = await supabase
+      .from("editais")
+      .update({ deleted_at: new Date().toISOString() } as any)
+      .eq("id", edital.id);
+    setDeleting(false);
+    setConfirmDeleteOpen(false);
+    if (error) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Edital excluído com sucesso." });
+      onBack();
+    }
+  };
+
+  const handleReopenEdital = async () => {
+    if (!reopenEndDate) {
+      toast({ title: "Data obrigatória", description: "Informe a nova data de encerramento.", variant: "destructive" });
+      return;
+    }
+    const newEnd = new Date(reopenEndDate);
+    if (newEnd <= new Date()) {
+      toast({ title: "Data inválida", description: "A nova data de encerramento deve ser futura.", variant: "destructive" });
+      return;
+    }
+    setReopening(true);
+    const { error } = await supabase
+      .from("editais")
+      .update({
+        status: "published" as "draft" | "published" | "closed",
+        end_date: newEnd.toISOString(),
+      })
+      .eq("id", edital.id);
+    setReopening(false);
+    setConfirmReopenOpen(false);
+    if (error) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    } else {
+      setDbStatus("published");
+      setEndDate(newEnd.toISOString());
+      toast({ title: "Edital reaberto! Novas submissões permitidas." });
+    }
+  };
+
   const handleSaveDates = async () => {
     if (!tempStart || !tempEnd) {
       toast({ title: "Preencha ambas as datas", variant: "destructive" });
@@ -235,6 +295,18 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
           {dbStatus === "published" && computedStatus !== "Encerrado" && (
             <Button size="sm" variant="secondary" onClick={() => setConfirmCloseOpen(true)}>
               <Lock className="w-4 h-4 mr-1" /> Encerrar
+            </Button>
+          )}
+          {/* Encerrado: Reabrir */}
+          {isEncerrado && isGestorMaster && (
+            <Button size="sm" variant="outline" onClick={() => { setReopenEndDate(""); setConfirmReopenOpen(true); }}>
+              <RotateCcw className="w-4 h-4 mr-1" /> Reabrir
+            </Button>
+          )}
+          {/* Excluir (Rascunho or Publicado sem submissões) */}
+          {(dbStatus === "draft" || dbStatus === "published") && isGestorMaster && (
+            <Button size="sm" variant="destructive" onClick={() => setConfirmDeleteOpen(true)}>
+              <Trash2 className="w-4 h-4 mr-1" /> Excluir
             </Button>
           )}
         </div>
@@ -423,6 +495,53 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
             <Button variant="outline" onClick={() => setConfirmCloseOpen(false)}>Cancelar</Button>
             <Button variant="destructive" onClick={handleCloseEdital}>
               <Lock className="w-4 h-4 mr-1" /> Confirmar encerramento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm delete dialog */}
+      <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir Edital</DialogTitle>
+            <DialogDescription>
+              Esta ação é irreversível. Deseja realmente excluir este edital?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setConfirmDeleteOpen(false)}>Cancelar</Button>
+            <Button variant="destructive" onClick={handleDeleteEdital} disabled={deleting}>
+              {deleting && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
+              <Trash2 className="w-4 h-4 mr-1" /> Confirmar exclusão
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm reopen dialog */}
+      <Dialog open={confirmReopenOpen} onOpenChange={setConfirmReopenOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reabrir Edital</DialogTitle>
+            <DialogDescription>
+              Defina uma nova data de encerramento para reabrir o edital e permitir novas submissões.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label>Nova data/hora de encerramento <span className="text-destructive">*</span></Label>
+            <Input
+              type="datetime-local"
+              value={reopenEndDate}
+              onChange={e => setReopenEndDate(e.target.value)}
+              className="mt-1"
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setConfirmReopenOpen(false)}>Cancelar</Button>
+            <Button onClick={handleReopenEdital} disabled={reopening}>
+              {reopening && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
+              <RotateCcw className="w-4 h-4 mr-1" /> Confirmar reabertura
             </Button>
           </DialogFooter>
         </DialogContent>
