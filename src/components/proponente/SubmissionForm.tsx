@@ -254,7 +254,7 @@ const SubmissionForm = ({ editalId, editalTitle, editalStartDate, editalEndDate,
     }
 
     if (isClosed) {
-      toast({ title: "Período de submissão encerrado", description: "Não é possível submeter fora do período de abertura.", variant: "destructive" });
+      toast({ title: "Submissões indisponíveis", description: "Verifique o período de vigência do edital.", variant: "destructive" });
       setConfirmOpen(false);
       return;
     }

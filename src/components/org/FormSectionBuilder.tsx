@@ -69,11 +69,12 @@ interface FormSectionBuilderProps {
   formId: string;
   formStatus: string;
   editalId: string;
+  editalDbStatus?: string;
   onStatusChange: (newStatus: string) => void;
   onPreview: () => void;
 }
 
-const FormSectionBuilder = ({ formId, formStatus, editalId, onStatusChange, onPreview }: FormSectionBuilderProps) => {
+const FormSectionBuilder = ({ formId, formStatus, editalId, editalDbStatus, onStatusChange, onPreview }: FormSectionBuilderProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [sections, setSections] = useState<Section[]>([]);
@@ -105,6 +106,8 @@ const FormSectionBuilder = ({ formId, formStatus, editalId, onStatusChange, onPr
   const [savingQuestion, setSavingQuestion] = useState(false);
 
   const isLocked = formStatus === "published";
+  const editalPublished = editalDbStatus === "published" || editalDbStatus === "closed";
+  const canDelete = !isLocked && !editalPublished;
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -184,7 +187,10 @@ const FormSectionBuilder = ({ formId, formStatus, editalId, onStatusChange, onPr
   };
 
   const deleteSection = async (s: Section) => {
-    if (isLocked) return;
+    if (!canDelete) {
+      toast({ title: "Não permitido", description: "Não é possível excluir seções de um edital publicado.", variant: "destructive" });
+      return;
+    }
     if (!confirm(`Excluir a seção "${s.title}" e todas as perguntas?`)) return;
     const { error } = await supabase.from("form_sections").delete().eq("id", s.id);
     if (error) toast({ title: "Erro", description: error.message, variant: "destructive" });
@@ -365,7 +371,10 @@ const FormSectionBuilder = ({ formId, formStatus, editalId, onStatusChange, onPr
   };
 
   const deleteQuestion = async (q: Question) => {
-    if (isLocked) return;
+    if (!canDelete) {
+      toast({ title: "Não permitido", description: "Não é possível excluir perguntas de um edital publicado.", variant: "destructive" });
+      return;
+    }
     if (!confirm(`Excluir a pergunta "${q.label}"?`)) return;
     const { error } = await supabase.from("form_questions").delete().eq("id", q.id);
     if (error) toast({ title: "Erro", description: error.message, variant: "destructive" });
@@ -544,9 +553,11 @@ const FormSectionBuilder = ({ formId, formStatus, editalId, onStatusChange, onPr
                     <Button size="icon" variant="ghost" onClick={() => openEditSection(section)}>
                       <Pencil className="w-4 h-4" />
                     </Button>
-                    <Button size="icon" variant="ghost" onClick={() => deleteSection(section)}>
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </Button>
+                    {canDelete && (
+                      <Button size="icon" variant="ghost" onClick={() => deleteSection(section)}>
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>
@@ -592,9 +603,11 @@ const FormSectionBuilder = ({ formId, formStatus, editalId, onStatusChange, onPr
                       <Button size="icon" variant="ghost" onClick={() => openEditQuestion(q)}>
                         <Pencil className="w-3.5 h-3.5" />
                       </Button>
-                      <Button size="icon" variant="ghost" onClick={() => deleteQuestion(q)}>
-                        <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                      </Button>
+                      {canDelete && (
+                        <Button size="icon" variant="ghost" onClick={() => deleteQuestion(q)}>
+                          <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>

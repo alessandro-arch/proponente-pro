@@ -162,7 +162,7 @@ const EditaisAbertos = ({ orgId, userId, onStartProposal }: Props) => {
                     ) : computed === "Agendado" ? (
                       <span className="text-sm text-muted-foreground">Aguardando abertura</span>
                     ) : (
-                      <span className="text-sm text-muted-foreground">Período de submissão encerrado</span>
+                      <span className="text-sm text-muted-foreground">Submissões indisponíveis. Verifique o período de vigência do edital.</span>
                     )}
                   </div>
                 </CardContent>
