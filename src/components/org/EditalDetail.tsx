@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, Send, Lock, Plus, FileText, Settings, Inbox, ClipboardCheck, AlertTriangle, Trash2, RotateCcw } from "lucide-react";
+import { Loader2, ArrowLeft, Send, Lock, Plus, FileText, Settings, Inbox, ClipboardCheck, AlertTriangle, Trash2, RotateCcw, Copy } from "lucide-react";
 import FormKnowledgeAreas from "@/components/org/FormKnowledgeAreas";
 import FormSectionBuilder from "@/components/org/FormSectionBuilder";
 import FormPreview from "@/components/org/FormPreview";
@@ -32,7 +32,7 @@ interface Edital {
   blind_review_enabled: boolean;
 }
 
-const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string; onBack: () => void }) => {
+const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; orgId: string; onBack: () => void; onDuplicate?: (sourceEdital: Edital) => void }) => {
   const { user, globalRole, membership } = useAuth();
   const { toast } = useToast();
   const [dbStatus, setDbStatus] = useState(edital.status);
@@ -307,6 +307,12 @@ const EditalDetail = ({ edital, orgId, onBack }: { edital: Edital; orgId: string
           {(dbStatus === "draft" || dbStatus === "published") && isGestorMaster && (
             <Button size="sm" variant="destructive" onClick={() => setConfirmDeleteOpen(true)}>
               <Trash2 className="w-4 h-4 mr-1" /> Excluir
+            </Button>
+          )}
+          {/* Duplicar */}
+          {isGestorMaster && onDuplicate && (
+            <Button size="sm" variant="outline" onClick={() => onDuplicate(edital)}>
+              <Copy className="w-4 h-4 mr-1" /> Duplicar
             </Button>
           )}
         </div>

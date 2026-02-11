@@ -7,10 +7,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, ScrollText, Search } from "lucide-react";
+import { Loader2, Plus, ScrollText, Search, Copy, AlertTriangle } from "lucide-react";
 import EditalDetail from "@/components/org/EditalDetail";
 import { getComputedStatus, getStatusVariant } from "@/lib/edital-status";
 
@@ -42,6 +43,16 @@ const EditaisList = ({ orgId }: { orgId: string }) => {
   const [newEndDate, setNewEndDate] = useState("");
   const [selectedEdital, setSelectedEdital] = useState<Edital | null>(null);
 
+  // Duplicate state
+  const [dupDialogOpen, setDupDialogOpen] = useState(false);
+  const [dupSource, setDupSource] = useState<Edital | null>(null);
+  const [dupTitle, setDupTitle] = useState("");
+  const [dupCloneForm, setDupCloneForm] = useState(true);
+  const [dupCloneAreas, setDupCloneAreas] = useState(true);
+  const [dupCloneCriteria, setDupCloneCriteria] = useState(true);
+  const [dupCloneReviewers, setDupCloneReviewers] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
+
   const fetchEditais = async () => {
     setLoading(true);
     let query = supabase.from("editais").select("*").eq("organization_id", orgId).is("deleted_at", null).order("created_at", { ascending: false });
@@ -58,7 +69,6 @@ const EditaisList = ({ orgId }: { orgId: string }) => {
     e.preventDefault();
     if (!user) return;
 
-    // Validate required fields
     if (!newTitle.trim()) {
       toast({ title: "Campo obrigatório", description: "Informe o título da chamada.", variant: "destructive" });
       return;
@@ -103,6 +113,224 @@ const EditaisList = ({ orgId }: { orgId: string }) => {
     }
   };
 
+  const handleOpenDuplicate = (sourceEdital: Edital) => {
+    setDupSource(sourceEdital);
+    setDupTitle(`${sourceEdital.title} (cópia)`);
+    setDupCloneForm(true);
+    setDupCloneAreas(true);
+    setDupCloneCriteria(true);
+    setDupCloneReviewers(false);
+    setDupDialogOpen(true);
+    // Close detail view so modal is visible
+    setSelectedEdital(null);
+  };
+
+  const handleDuplicate = async () => {
+    if (!user || !dupSource) return;
+    if (!dupTitle.trim()) {
+      toast({ title: "Título obrigatório", description: "Informe o título do novo edital.", variant: "destructive" });
+      return;
+    }
+
+    setDuplicating(true);
+
+    try {
+      // 1. Create new edital as draft (no dates)
+      const { data: newEdital, error: editalErr } = await supabase.from("editais").insert({
+        title: dupTitle.trim(),
+        description: dupSource.description,
+        organization_id: orgId,
+        created_by: user.id,
+        status: "draft" as "draft" | "published" | "closed",
+        blind_review_enabled: dupSource.blind_review_enabled,
+        min_reviewers_per_proposal: dupSource.min_reviewers_per_proposal,
+        review_deadline: null,
+        start_date: null,
+        end_date: null,
+      }).select().single();
+
+      if (editalErr || !newEdital) throw editalErr || new Error("Falha ao criar edital");
+
+      const newEditalId = newEdital.id;
+
+      // 2. Clone form structure
+      if (dupCloneForm) {
+        const { data: srcForm } = await supabase
+          .from("edital_forms")
+          .select("*")
+          .eq("edital_id", dupSource.id)
+          .maybeSingle();
+
+        if (srcForm) {
+          const { data: newForm, error: formErr } = await supabase.from("edital_forms").insert({
+            edital_id: newEditalId,
+            organization_id: orgId,
+            status: "draft",
+            knowledge_area_mode: (srcForm as any).knowledge_area_mode,
+            knowledge_area_required: (srcForm as any).knowledge_area_required,
+          }).select().single();
+
+          if (!formErr && newForm) {
+            const newFormId = newForm.id;
+
+            // Clone sections
+            const { data: srcSections } = await supabase
+              .from("form_sections")
+              .select("*")
+              .eq("form_id", srcForm.id)
+              .order("sort_order");
+
+            if (srcSections && srcSections.length > 0) {
+              const sectionIdMap = new Map<string, string>();
+
+              for (const sec of srcSections) {
+                const { data: newSec } = await supabase.from("form_sections").insert({
+                  form_id: newFormId,
+                  title: sec.title,
+                  description: sec.description,
+                  sort_order: sec.sort_order,
+                }).select().single();
+                if (newSec) sectionIdMap.set(sec.id, newSec.id);
+              }
+
+              // Clone questions
+              const { data: srcQuestions } = await supabase
+                .from("form_questions")
+                .select("*")
+                .eq("form_id", srcForm.id)
+                .order("sort_order");
+
+              if (srcQuestions && srcQuestions.length > 0) {
+                for (const q of srcQuestions) {
+                  const newSectionId = q.section_id ? sectionIdMap.get(q.section_id) : null;
+                  const { data: newQ } = await supabase.from("form_questions").insert({
+                    form_id: newFormId,
+                    section_id: newSectionId || null,
+                    section: q.section,
+                    label: q.label,
+                    type: q.type,
+                    help_text: q.help_text,
+                    is_required: q.is_required,
+                    options: q.options,
+                    options_source: q.options_source,
+                    validation_rules: q.validation_rules,
+                    sort_order: q.sort_order,
+                  }).select().single();
+
+                  // Clone question options
+                  if (newQ) {
+                    const { data: srcOpts } = await supabase
+                      .from("form_question_options")
+                      .select("*")
+                      .eq("question_id", q.id)
+                      .order("sort_order");
+                    if (srcOpts && srcOpts.length > 0) {
+                      await supabase.from("form_question_options").insert(
+                        srcOpts.map(o => ({
+                          question_id: newQ.id,
+                          label: o.label,
+                          value: o.value,
+                          sort_order: o.sort_order,
+                        }))
+                      );
+                    }
+                  }
+                }
+              }
+            }
+
+            // Clone form knowledge areas
+            if (dupCloneAreas) {
+              const { data: srcKAs } = await supabase
+                .from("form_knowledge_areas")
+                .select("*")
+                .eq("form_id", srcForm.id)
+                .order("sort_order");
+              if (srcKAs && srcKAs.length > 0) {
+                await supabase.from("form_knowledge_areas").insert(
+                  srcKAs.map(ka => ({
+                    form_id: newFormId,
+                    name: ka.name,
+                    code: ka.code,
+                    description: ka.description,
+                    sort_order: ka.sort_order,
+                    is_active: ka.is_active,
+                  }))
+                );
+              }
+            }
+          }
+        }
+      }
+
+      // 3. Clone scoring criteria
+      if (dupCloneCriteria) {
+        const { data: srcCriteria } = await supabase
+          .from("scoring_criteria")
+          .select("*")
+          .eq("edital_id", dupSource.id)
+          .order("sort_order");
+        if (srcCriteria && srcCriteria.length > 0) {
+          await supabase.from("scoring_criteria").insert(
+            srcCriteria.map(c => ({
+              edital_id: newEditalId,
+              name: c.name,
+              description: c.description,
+              max_score: c.max_score,
+              weight: c.weight,
+              sort_order: c.sort_order,
+            }))
+          );
+        }
+      }
+
+      // 4. Clone knowledge areas (edital_areas)
+      if (dupCloneAreas) {
+        const { data: srcAreas } = await supabase
+          .from("edital_areas")
+          .select("*")
+          .eq("edital_id", dupSource.id);
+        if (srcAreas && srcAreas.length > 0) {
+          await supabase.from("edital_areas").insert(
+            srcAreas.map(a => ({
+              edital_id: newEditalId,
+              knowledge_area_id: a.knowledge_area_id,
+            }))
+          );
+        }
+      }
+
+      // 5. Audit log
+      await supabase.from("audit_logs").insert({
+        user_id: user.id,
+        organization_id: orgId,
+        entity: "edital",
+        entity_id: newEditalId,
+        action: "edital.duplicate",
+        metadata_json: {
+          source_edital_id: dupSource.id,
+          source_title: dupSource.title,
+          cloned_form: dupCloneForm,
+          cloned_areas: dupCloneAreas,
+          cloned_criteria: dupCloneCriteria,
+          cloned_reviewers: dupCloneReviewers,
+        },
+      });
+
+      setDuplicating(false);
+      setDupDialogOpen(false);
+      toast({ title: "Edital duplicado com sucesso!", description: "O novo edital foi criado como rascunho." });
+
+      // Refresh and navigate to new edital
+      await fetchEditais();
+      setSelectedEdital(newEdital as Edital);
+
+    } catch (err: any) {
+      setDuplicating(false);
+      toast({ title: "Erro ao duplicar", description: err?.message || "Tente novamente.", variant: "destructive" });
+    }
+  };
+
   const statusBadge = (e: Edital) => {
     const computed = getComputedStatus(e.status, e.start_date, e.end_date);
     const variant = getStatusVariant(computed);
@@ -114,7 +342,14 @@ const EditaisList = ({ orgId }: { orgId: string }) => {
   };
 
   if (selectedEdital) {
-    return <EditalDetail edital={selectedEdital} orgId={orgId} onBack={() => { setSelectedEdital(null); fetchEditais(); }} />;
+    return (
+      <EditalDetail
+        edital={selectedEdital}
+        orgId={orgId}
+        onBack={() => { setSelectedEdital(null); fetchEditais(); }}
+        onDuplicate={handleOpenDuplicate}
+      />
+    );
   }
 
   return (
@@ -139,21 +374,11 @@ const EditaisList = ({ orgId }: { orgId: string }) => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Data de Abertura <span className="text-destructive">*</span></Label>
-                  <Input
-                    type="datetime-local"
-                    value={newStartDate}
-                    onChange={(e) => setNewStartDate(e.target.value)}
-                    className="mt-1"
-                  />
+                  <Input type="datetime-local" value={newStartDate} onChange={(e) => setNewStartDate(e.target.value)} className="mt-1" />
                 </div>
                 <div>
                   <Label>Data de Encerramento <span className="text-destructive">*</span></Label>
-                  <Input
-                    type="datetime-local"
-                    value={newEndDate}
-                    onChange={(e) => setNewEndDate(e.target.value)}
-                    className="mt-1"
-                  />
+                  <Input type="datetime-local" value={newEndDate} onChange={(e) => setNewEndDate(e.target.value)} className="mt-1" />
                 </div>
               </div>
               {newStartDate && newEndDate && new Date(newEndDate) <= new Date(newStartDate) && (
@@ -166,6 +391,58 @@ const EditaisList = ({ orgId }: { orgId: string }) => {
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Duplicate dialog */}
+      <Dialog open={dupDialogOpen} onOpenChange={setDupDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Copy className="w-5 h-5" /> Duplicar Edital
+            </DialogTitle>
+            <DialogDescription>
+              Crie uma nova chamada a partir de <strong>{dupSource?.title}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label>Título do novo edital <span className="text-destructive">*</span></Label>
+              <Input value={dupTitle} onChange={(e) => setDupTitle(e.target.value)} className="mt-1" />
+            </div>
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">O que clonar:</Label>
+              <div className="flex items-center gap-2">
+                <Checkbox id="dup-form" checked={dupCloneForm} onCheckedChange={(c) => setDupCloneForm(!!c)} />
+                <label htmlFor="dup-form" className="text-sm">Clonar formulário de submissão</label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox id="dup-areas" checked={dupCloneAreas} onCheckedChange={(c) => setDupCloneAreas(!!c)} />
+                <label htmlFor="dup-areas" className="text-sm">Clonar áreas do conhecimento vinculadas</label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox id="dup-criteria" checked={dupCloneCriteria} onCheckedChange={(c) => setDupCloneCriteria(!!c)} />
+                <label htmlFor="dup-criteria" className="text-sm">Clonar critérios de avaliação e baremas</label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox id="dup-reviewers" checked={dupCloneReviewers} onCheckedChange={(c) => setDupCloneReviewers(!!c)} />
+                <label htmlFor="dup-reviewers" className="text-sm">Clonar avaliadores vinculados</label>
+              </div>
+            </div>
+            <div className="flex items-start gap-2 p-3 rounded-md border border-border bg-muted/30">
+              <AlertTriangle className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+              <p className="text-xs text-muted-foreground">
+                Submissões, avaliações, notas, pareceres e dados financeiros <strong>NÃO</strong> serão copiados.
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDupDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleDuplicate} disabled={duplicating}>
+              {duplicating && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
+              <Copy className="w-4 h-4 mr-1" /> Duplicar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="flex items-center gap-3 mb-4">
         <div className="relative flex-1 max-w-sm">
