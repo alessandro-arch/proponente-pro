@@ -18,7 +18,7 @@ import SubmissionsList from "@/components/org/SubmissionsList";
 import ReviewManagement from "@/components/org/ReviewManagement";
 import ScoringCriteriaManager from "@/components/org/ScoringCriteriaManager";
 import IdentityReveal from "@/components/org/IdentityReveal";
-import EditalWorkflowStepper from "@/components/org/EditalWorkflowStepper";
+import EditalTimeline from "@/components/org/EditalTimeline";
 import {
   getComputedStatus,
   getStatusVariant,
@@ -342,33 +342,19 @@ const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; 
         </div>
       </div>
 
-      {/* Workflow Stepper */}
+      {/* Workflow Timeline */}
       <div className="mb-6">
-        <EditalWorkflowStepper currentStatus={dbStatus} isCancelled={isCancelled} />
+        <EditalTimeline
+          editalId={edital.id}
+          currentStatus={dbStatus}
+          isCancelled={isCancelled}
+          isGestor={isGestorMaster}
+          startDate={startDate}
+          endDate={endDate}
+          allowedTransitions={allowedTransitions}
+          onTransition={openTransitionDialog}
+        />
       </div>
-
-      {/* Workflow Actions */}
-      {allowedTransitions.length > 0 && (
-        <Card className="mb-6">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Ações do Workflow</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {allowedTransitions.map((t) => (
-                <Button
-                  key={t.targetStatus}
-                  size="sm"
-                  variant={t.variant}
-                  onClick={() => openTransitionDialog(t)}
-                >
-                  {t.label}
-                </Button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Tabs */}
       <Tabs defaultValue="overview">
