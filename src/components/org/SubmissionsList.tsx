@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Loader2, Search, Eye, Download, FileText, ArrowLeft, Users } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import ReviewerAssignment from "@/components/org/ReviewerAssignment";
 import { generateProposalPdf } from "@/lib/generate-proposal-pdf";
 import { generateSubmissionReceipt } from "@/lib/generate-submission-receipt";
@@ -28,6 +29,7 @@ const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secon
 };
 
 const SubmissionsList = ({ editalId, editalTitle, orgId }: SubmissionsListProps) => {
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedSubmission, setSelectedSubmission] = useState<any>(null);
@@ -202,15 +204,49 @@ const SubmissionsList = ({ editalId, editalTitle, orgId }: SubmissionsListProps)
               }}>
                 <FileText className="w-4 h-4 mr-1" /> Baixar Recibo
               </Button>
-              <Button size="sm" variant="secondary" onClick={() => {
-                // Find proposal for this submission
-                const proposal = (proposals || []).find((p: any) => p.proponente_user_id === selectedSubmission.user_id);
-                if (proposal && orgId) {
+              <Button size="sm" variant="secondary" onClick={async () => {
+                if (!orgId) return;
+                try {
+                  // Find existing proposal for this submission's user + edital
+                  let proposal: any = (proposals || []).find((p: any) => p.proponente_user_id === selectedSubmission.user_id);
+
+                  if (!proposal) {
+                    // Auto-create proposal from submission so reviewers can be assigned
+                    const { data: newProposal, error: createError } = await supabase
+                      .from("proposals")
+                      .insert({
+                        edital_id: editalId,
+                        organization_id: orgId,
+                        proponente_user_id: selectedSubmission.user_id,
+                        status: "submitted",
+                        submitted_at: selectedSubmission.submitted_at || new Date().toISOString(),
+                      })
+                      .select("id, blind_code")
+                      .single();
+
+                    if (createError) {
+                      toast({ title: "Erro ao preparar proposta para avaliação", description: createError.message, variant: "destructive" });
+                      return;
+                    }
+                    proposal = newProposal;
+
+                    // Also copy answers to proposal_answers for reviewer access
+                    if (selectedSubmission.answers && Object.keys(selectedSubmission.answers).length > 0) {
+                      await supabase.from("proposal_answers").upsert({
+                        proposal_id: newProposal.id,
+                        answers_json: selectedSubmission.answers,
+                      }, { onConflict: "proposal_id" });
+                    }
+                  }
+
                   setAssignDialog({
                     proposalId: proposal.id,
                     blindCode: proposal.blind_code || selectedSubmission.protocol,
                     cnpqArea: selectedSubmission.cnpq_area_code,
                   });
+                } catch (err: any) {
+                  console.error("Error preparing proposal for review:", err);
+                  toast({ title: "Erro inesperado", description: err.message || "Tente novamente.", variant: "destructive" });
                 }
               }} disabled={!orgId}>
                 <Users className="w-4 h-4 mr-1" /> Enviar para avaliação
