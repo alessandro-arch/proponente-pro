@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Loader2, Search, Eye, Download, FileText, ArrowLeft, Users } from "lucide-react";
 import ReviewerAssignment from "@/components/org/ReviewerAssignment";
+import { generateProposalPdf } from "@/lib/generate-proposal-pdf";
 
 interface SubmissionsListProps {
   editalId: string;
@@ -152,35 +153,38 @@ const SubmissionsList = ({ editalId, editalTitle, orgId }: SubmissionsListProps)
             </div>
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={() => {
-                const printWindow = window.open("", "_blank");
-                if (!printWindow || !snapshot) return;
-                const sectionsHtml = (snapshot.sections || []).sort((a: any, b: any) => a.sort_order - b.sort_order).map((s: any) => {
-                  const questionsHtml = (s.questions || []).sort((a: any, b: any) => a.sort_order - b.sort_order).map((q: any) => {
-                    let answerDisplay = answers[q.id] || "—";
-                    if (Array.isArray(answerDisplay)) answerDisplay = answerDisplay.join(", ");
-                    return `<div style="margin-bottom:12px"><strong>${q.label}</strong><br/><span>${answerDisplay}</span></div>`;
-                  }).join("");
-                  return `<h2 style="color:#333;border-bottom:1px solid #ccc;padding-bottom:4px;margin-top:20px">${s.title}</h2>${questionsHtml}`;
-                }).join("");
-                printWindow.document.write(`<!DOCTYPE html><html><head><title>Proposta - ${selectedSubmission.protocol}</title>
-                  <style>body{font-family:Arial,sans-serif;max-width:700px;margin:40px auto;padding:20px;color:#222}
-                  .header{text-align:center;border-bottom:2px solid #333;padding-bottom:16px;margin-bottom:24px}
-                  .footer{margin-top:40px;border-top:1px solid #ccc;padding-top:12px;font-size:11px;color:#888;text-align:center}</style></head>
-                  <body>
-                    <div class="header">
-                      <h1 style="font-size:18px;margin-bottom:8px">${editalTitle}</h1>
-                      <p><strong>Proponente:</strong> ${(profile as any)?.full_name || "—"}</p>
-                      <p><strong>Protocolo:</strong> ${selectedSubmission.protocol}</p>
-                      <p><strong>Data:</strong> ${selectedSubmission.submitted_at ? new Date(selectedSubmission.submitted_at).toLocaleString("pt-BR") : "—"}</p>
-                    </div>
-                    ${sectionsHtml}
-                    <div class="footer">
-                      <p>Documento gerado automaticamente pela plataforma SisConnecta</p>
-                      <p>ID: ${selectedSubmission.id}</p>
-                    </div>
-                  </body></html>`);
-                printWindow.document.close();
-                printWindow.print();
+                if (!snapshot) return;
+                const sections = (snapshot.sections || [])
+                  .sort((a: any, b: any) => a.sort_order - b.sort_order)
+                  .map((s: any) => ({
+                    title: s.title,
+                    description: s.description,
+                    questions: (s.questions || [])
+                      .sort((a: any, b: any) => a.sort_order - b.sort_order)
+                      .map((q: any) => {
+                        let answerDisplay = answers[q.id] || "—";
+                        if (Array.isArray(answerDisplay)) answerDisplay = answerDisplay.join(", ");
+                        if (q.options_source === "knowledge_areas" && snapshot.knowledge_areas) {
+                          const ka = snapshot.knowledge_areas.find((k: any) => k.id === answerDisplay);
+                          if (ka) answerDisplay = ka.name;
+                        }
+                        if (q.options_source === "manual" && q.manual_options) {
+                          const opt = q.manual_options.find((o: any) => o.value === answerDisplay);
+                          if (opt) answerDisplay = opt.label;
+                        }
+                        return { label: q.label, isRequired: q.is_required, answer: answerDisplay };
+                      }),
+                  }));
+                generateProposalPdf({
+                  editalTitle: editalTitle,
+                  proponenteName: (profile as any)?.full_name || "—",
+                  proponenteEmail: (profile as any)?.email || "—",
+                  protocol: selectedSubmission.protocol || "—",
+                  submittedAt: selectedSubmission.submitted_at ? new Date(selectedSubmission.submitted_at).toLocaleString("pt-BR") : "—",
+                  cnpqArea: selectedSubmission.cnpq_area_code,
+                  submissionId: selectedSubmission.id,
+                  sections,
+                });
               }}>
                 <Download className="w-4 h-4 mr-1" /> Baixar PDF
               </Button>
