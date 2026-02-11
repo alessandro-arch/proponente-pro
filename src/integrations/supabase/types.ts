@@ -1926,6 +1926,7 @@ export type Database = {
           cpf_last4: string | null
           created_at: string
           email: string
+          first_terms_accepted_at: string | null
           full_name: string
           id: string
           institution: string
@@ -1938,6 +1939,7 @@ export type Database = {
           orcid: string | null
           org_id: string
           status: string
+          terms_version: string | null
           updated_at: string
           user_id: string | null
         }
@@ -1949,6 +1951,7 @@ export type Database = {
           cpf_last4?: string | null
           created_at?: string
           email: string
+          first_terms_accepted_at?: string | null
           full_name: string
           id?: string
           institution: string
@@ -1961,6 +1964,7 @@ export type Database = {
           orcid?: string | null
           org_id: string
           status?: string
+          terms_version?: string | null
           updated_at?: string
           user_id?: string | null
         }
@@ -1972,6 +1976,7 @@ export type Database = {
           cpf_last4?: string | null
           created_at?: string
           email?: string
+          first_terms_accepted_at?: string | null
           full_name?: string
           id?: string
           institution?: string
@@ -1984,6 +1989,7 @@ export type Database = {
           orcid?: string | null
           org_id?: string
           status?: string
+          terms_version?: string | null
           updated_at?: string
           user_id?: string | null
         }
