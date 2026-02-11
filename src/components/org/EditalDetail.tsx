@@ -18,6 +18,7 @@ import SubmissionsList from "@/components/org/SubmissionsList";
 import ReviewManagement from "@/components/org/ReviewManagement";
 import ScoringCriteriaManager from "@/components/org/ScoringCriteriaManager";
 import IdentityReveal from "@/components/org/IdentityReveal";
+import FormSelector from "@/components/org/FormSelector";
 import EditalTimeline from "@/components/org/EditalTimeline";
 import {
   getComputedStatus,
@@ -459,6 +460,19 @@ const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; 
               <p className="text-sm text-muted-foreground">Formulário em modo somente leitura.</p>
             </div>
           )}
+
+          {/* Form Library Link */}
+          {!isReadOnly && (
+            <div className="mb-6">
+              <FormSelector
+                editalId={edital.id}
+                orgId={orgId}
+                currentFormId={(edital as any).form_id ?? null}
+                onFormLinked={() => {}}
+              />
+            </div>
+          )}
+
           {loadingForm ? (
             <div className="flex justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />

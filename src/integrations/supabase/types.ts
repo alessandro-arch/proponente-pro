@@ -211,6 +211,7 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           end_date: string | null
+          form_id: string | null
           id: string
           min_reviewers_per_proposal: number | null
           organization_id: string
@@ -229,6 +230,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           end_date?: string | null
+          form_id?: string | null
           id?: string
           min_reviewers_per_proposal?: number | null
           organization_id: string
@@ -247,6 +249,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           end_date?: string | null
+          form_id?: string | null
           id?: string
           min_reviewers_per_proposal?: number | null
           organization_id?: string
@@ -258,6 +261,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "editais_form_id_fkey"
+            columns: ["form_id"]
+            isOneToOne: false
+            referencedRelation: "forms"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "editais_organization_id_fkey"
             columns: ["organization_id"]
@@ -552,6 +562,68 @@ export type Database = {
           },
         ]
       }
+      form_fields: {
+        Row: {
+          created_at: string
+          field_type: Database["public"]["Enums"]["field_type"]
+          form_id: string
+          help_text: string | null
+          id: string
+          is_required: boolean
+          label: string
+          max_chars: number | null
+          min_chars: number | null
+          options: Json | null
+          section_description: string | null
+          section_title: string | null
+          sort_order: number
+          updated_at: string
+          validation_rules: Json | null
+        }
+        Insert: {
+          created_at?: string
+          field_type?: Database["public"]["Enums"]["field_type"]
+          form_id: string
+          help_text?: string | null
+          id?: string
+          is_required?: boolean
+          label: string
+          max_chars?: number | null
+          min_chars?: number | null
+          options?: Json | null
+          section_description?: string | null
+          section_title?: string | null
+          sort_order?: number
+          updated_at?: string
+          validation_rules?: Json | null
+        }
+        Update: {
+          created_at?: string
+          field_type?: Database["public"]["Enums"]["field_type"]
+          form_id?: string
+          help_text?: string | null
+          id?: string
+          is_required?: boolean
+          label?: string
+          max_chars?: number | null
+          min_chars?: number | null
+          options?: Json | null
+          section_description?: string | null
+          section_title?: string | null
+          sort_order?: number
+          updated_at?: string
+          validation_rules?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "form_fields_form_id_fkey"
+            columns: ["form_id"]
+            isOneToOne: false
+            referencedRelation: "forms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       form_knowledge_areas: {
         Row: {
           code: string | null
@@ -817,6 +889,53 @@ export type Database = {
             columns: ["form_id"]
             isOneToOne: false
             referencedRelation: "edital_forms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      forms: {
+        Row: {
+          code: string
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          name: string
+          organization_id: string
+          status: Database["public"]["Enums"]["form_status"]
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          name: string
+          organization_id: string
+          status?: Database["public"]["Enums"]["form_status"]
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          name?: string
+          organization_id?: string
+          status?: Database["public"]["Enums"]["form_status"]
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "forms_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -2033,6 +2152,7 @@ export type Database = {
     }
     Functions: {
       ensure_default_membership: { Args: never; Returns: undefined }
+      generate_form_code: { Args: { p_org_id: string }; Returns: string }
       generate_submission_protocol: {
         Args: { p_edital_id: string }
         Returns: string
@@ -2089,6 +2209,21 @@ export type Database = {
         | "homologado"
         | "outorgado"
         | "cancelado"
+      field_type:
+        | "text"
+        | "textarea"
+        | "number"
+        | "date"
+        | "file"
+        | "single_select"
+        | "multi_select"
+        | "checkbox"
+        | "radio"
+        | "email"
+        | "url"
+        | "phone"
+        | "currency"
+      form_status: "draft" | "published" | "archived"
       proposal_status:
         | "draft"
         | "submitted"
@@ -2240,6 +2375,22 @@ export const Constants = {
         "outorgado",
         "cancelado",
       ],
+      field_type: [
+        "text",
+        "textarea",
+        "number",
+        "date",
+        "file",
+        "single_select",
+        "multi_select",
+        "checkbox",
+        "radio",
+        "email",
+        "url",
+        "phone",
+        "currency",
+      ],
+      form_status: ["draft", "published", "archived"],
       proposal_status: [
         "draft",
         "submitted",

@@ -2,16 +2,19 @@ import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Navigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Loader2, FileText, LogOut, UserCircle, LayoutDashboard, ScrollText, Users, Shield, UserSearch } from "lucide-react";
+import { Loader2, FileText, LogOut, UserCircle, LayoutDashboard, ScrollText, Users, Shield, UserSearch, BookOpen } from "lucide-react";
 import OrgDashboard from "@/components/org/OrgDashboard";
 import EditaisList from "@/components/org/EditaisList";
 import AuditLogViewer from "@/components/org/AuditLogViewer";
 import ReviewersList from "@/components/org/reviewers/ReviewersList";
 import ReviewerDetail from "@/components/org/reviewers/ReviewerDetail";
+import FormLibraryList from "@/components/org/FormLibraryList";
+import FormLibraryEditor from "@/components/org/FormLibraryEditor";
 
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "editais", label: "Editais", icon: ScrollText },
+  { key: "forms", label: "Formulários", icon: BookOpen },
   { key: "reviewers", label: "Avaliadores", icon: UserSearch },
   { key: "members", label: "Membros", icon: Users },
   { key: "audit", label: "Auditoria", icon: Shield },
@@ -23,6 +26,7 @@ const OrgPanel = () => {
   const { user, loading, membership, signOut } = useAuth();
   const [activeNav, setActiveNav] = useState<NavKey>("dashboard");
   const [selectedReviewerId, setSelectedReviewerId] = useState<string | null>(null);
+  const [editingFormId, setEditingFormId] = useState<string | null>(null);
 
   if (loading) {
     return (
@@ -56,7 +60,7 @@ const OrgPanel = () => {
           {NAV_ITEMS.map((item) => (
             <button
               key={item.key}
-              onClick={() => { setActiveNav(item.key); setSelectedReviewerId(null); }}
+              onClick={() => { setActiveNav(item.key); setSelectedReviewerId(null); setEditingFormId(null); }}
               className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 activeNav === item.key
                   ? "bg-primary text-primary-foreground"
@@ -84,6 +88,20 @@ const OrgPanel = () => {
         <div className="p-8">
           {activeNav === "dashboard" && <OrgDashboard orgId={orgId} />}
           {activeNav === "editais" && <EditaisList orgId={orgId} />}
+          {activeNav === "forms" && (
+            editingFormId ? (
+              <FormLibraryEditor
+                formId={editingFormId}
+                orgId={orgId}
+                onBack={() => setEditingFormId(null)}
+              />
+            ) : (
+              <FormLibraryList
+                orgId={orgId}
+                onEditForm={(id) => setEditingFormId(id)}
+              />
+            )
+          )}
           {activeNav === "reviewers" && (
             selectedReviewerId ? (
               <ReviewerDetail
