@@ -56,8 +56,7 @@ interface KnowledgeArea {
 }
 
 const QUESTION_TYPES = [
-  { value: "short_text", label: "Texto curto" },
-  { value: "long_text", label: "Texto longo" },
+  { value: "text", label: "Texto (com limite de caracteres)" },
   { value: "number", label: "Número" },
   { value: "date", label: "Data" },
   { value: "file", label: "Upload de arquivo" },
@@ -100,6 +99,8 @@ const FormSectionBuilder = ({ formId, formStatus, editalId, onStatusChange, onPr
   const [qRequired, setQRequired] = useState(false);
   const [qOptionsSource, setQOptionsSource] = useState<string>("manual");
   const [qManualOptions, setQManualOptions] = useState<{ value: string; label: string }[]>([]);
+  const [qMinChars, setQMinChars] = useState<string>("");
+  const [qMaxChars, setQMaxChars] = useState<string>("");
   const [savingQuestion, setSavingQuestion] = useState(false);
 
   const isLocked = formStatus === "published";
@@ -211,10 +212,12 @@ const FormSectionBuilder = ({ formId, formStatus, editalId, onStatusChange, onPr
     setTargetSectionId(sectionId);
     setQLabel("");
     setQHelpText("");
-    setQType("short_text");
+    setQType("text");
     setQRequired(false);
     setQOptionsSource("manual");
     setQManualOptions([{ value: "", label: "" }]);
+    setQMinChars("");
+    setQMaxChars("");
     setQuestionDialogOpen(true);
   };
 
@@ -224,9 +227,13 @@ const FormSectionBuilder = ({ formId, formStatus, editalId, onStatusChange, onPr
     setTargetSectionId(q.section_id || "");
     setQLabel(q.label);
     setQHelpText(q.help_text || "");
-    setQType(q.type);
+    setQType(q.type === "short_text" || q.type === "long_text" ? "text" : q.type);
     setQRequired(q.is_required);
     setQOptionsSource(q.options_source || "manual");
+    // Load char limits from validation_rules
+    const rules = (q as any).validation_rules as any;
+    setQMinChars(rules?.min_chars != null ? String(rules.min_chars) : "");
+    setQMaxChars(rules?.max_chars != null ? String(rules.max_chars) : "");
     // Load manual options
     if (q.options_source === "manual" && questionOptions[q.id]) {
       setQManualOptions(questionOptions[q.id].map(o => ({ value: o.value, label: o.label })));
@@ -255,8 +262,26 @@ const FormSectionBuilder = ({ formId, formStatus, editalId, onStatusChange, onPr
       return;
     }
 
+    // Validate max_chars for text type
+    const isTextType = qType === "text";
+    if (isTextType) {
+      if (!qMaxChars.trim() || parseInt(qMaxChars) <= 0) {
+        toast({ title: "Máximo de caracteres é obrigatório para campo de texto.", variant: "destructive" });
+        return;
+      }
+      if (qMinChars.trim() && parseInt(qMinChars) >= parseInt(qMaxChars)) {
+        toast({ title: "Mínimo de caracteres deve ser menor que o máximo.", variant: "destructive" });
+        return;
+      }
+    }
+
     setSavingQuestion(true);
     const sectionQuestions = questions.filter(q => q.section_id === targetSectionId);
+
+    const validationRules = isTextType ? {
+      min_chars: qMinChars.trim() ? parseInt(qMinChars) : null,
+      max_chars: parseInt(qMaxChars),
+    } : null;
 
     if (editingQuestion) {
       const { error } = await supabase.from("form_questions").update({
@@ -265,6 +290,7 @@ const FormSectionBuilder = ({ formId, formStatus, editalId, onStatusChange, onPr
         type: qType,
         is_required: qRequired,
         options_source: isSelectType ? qOptionsSource : null,
+        validation_rules: validationRules,
         section_id: targetSectionId || null,
         section: targetSectionId ? sections.find(s => s.id === targetSectionId)?.title || "default" : "default",
       }).eq("id", editingQuestion.id);
@@ -305,6 +331,7 @@ const FormSectionBuilder = ({ formId, formStatus, editalId, onStatusChange, onPr
         type: qType,
         is_required: qRequired,
         options_source: isSelectType ? qOptionsSource : null,
+        validation_rules: validationRules,
         sort_order: maxOrder + 1,
       }).select().single();
 
@@ -393,6 +420,7 @@ const FormSectionBuilder = ({ formId, formStatus, editalId, onStatusChange, onPr
           help_text: q.help_text,
           is_required: q.is_required,
           options_source: q.options_source,
+          validation_rules: (q as any).validation_rules || null,
           sort_order: q.sort_order,
           manual_options: q.options_source === "manual" ? (questionOptions[q.id] || []).map(o => ({
             value: o.value, label: o.label, sort_order: o.sort_order
@@ -445,7 +473,10 @@ const FormSectionBuilder = ({ formId, formStatus, editalId, onStatusChange, onPr
     else { toast({ title: "Formulário voltou para rascunho." }); onStatusChange("draft"); }
   };
 
-  const typeLabel = (t: string) => QUESTION_TYPES.find(qt => qt.value === t)?.label || t;
+  const typeLabel = (t: string) => {
+    if (t === "short_text" || t === "long_text") return "Texto (com limite de caracteres)";
+    return QUESTION_TYPES.find(qt => qt.value === t)?.label || t;
+  };
 
   if (loading) {
     return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
@@ -548,6 +579,11 @@ const FormSectionBuilder = ({ formId, formStatus, editalId, onStatusChange, onPr
                       {q.options_source === "manual" && questionOptions[q.id] && (
                         <span className="text-xs text-muted-foreground">{questionOptions[q.id].length} opções</span>
                       )}
+                      {(q.type === "text" || q.type === "short_text" || q.type === "long_text") && (q as any).validation_rules?.max_chars && (
+                        <span className="text-xs text-muted-foreground">
+                          {(q as any).validation_rules.min_chars ? `${(q as any).validation_rules.min_chars}–` : "máx "}{(q as any).validation_rules.max_chars} caracteres
+                        </span>
+                      )}
                     </div>
                   </div>
                   {!isLocked && (
@@ -644,6 +680,35 @@ const FormSectionBuilder = ({ formId, formStatus, editalId, onStatusChange, onPr
               <Label>Obrigatória</Label>
               <Switch checked={qRequired} onCheckedChange={setQRequired} />
             </div>
+
+            {/* Text char limits */}
+            {qType === "text" && (
+              <>
+                <Separator />
+                <div>
+                  <Label>Máximo de caracteres *</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={qMaxChars}
+                    onChange={e => setQMaxChars(e.target.value)}
+                    placeholder="Ex: 1500"
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>Mínimo de caracteres (opcional)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={qMinChars}
+                    onChange={e => setQMinChars(e.target.value)}
+                    placeholder="Ex: 100"
+                    className="mt-1"
+                  />
+                </div>
+              </>
+            )}
 
             {/* Select options */}
             {isSelectType && (

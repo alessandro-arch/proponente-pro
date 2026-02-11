@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { TextFieldWithCounter } from "@/components/ui/text-field-with-counter";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, Save, Send, AlertTriangle, CheckCircle2, Download, FileText } from "lucide-react";
 
@@ -35,6 +36,7 @@ interface SnapshotQuestion {
   help_text: string | null;
   is_required: boolean;
   options_source: string | null;
+  validation_rules?: { min_chars?: number | null; max_chars?: number | null } | null;
   sort_order: number;
   manual_options?: { value: string; label: string }[];
 }
@@ -165,6 +167,29 @@ const SubmissionForm = ({ editalId, editalTitle, editalEndDate, onBack }: Submis
     // Validate required fields
     const allQuestions = snapshot.sections.flatMap(s => s.questions);
     const missing = allQuestions.filter(q => q.is_required && !answers[q.id]);
+    // Validate char limits
+    const charErrors: string[] = [];
+    allQuestions.forEach(q => {
+      const rules = q.validation_rules;
+      const val = answers[q.id];
+      if (rules && val && typeof val === "string") {
+        if (rules.min_chars && val.length < rules.min_chars) {
+          charErrors.push(`"${q.label}" precisa de no mínimo ${rules.min_chars} caracteres (atual: ${val.length}).`);
+        }
+        if (rules.max_chars && val.length > rules.max_chars) {
+          charErrors.push(`"${q.label}" excede o máximo de ${rules.max_chars} caracteres (atual: ${val.length}).`);
+        }
+      }
+    });
+    if (charErrors.length > 0) {
+      toast({
+        title: "Erro de limite de caracteres",
+        description: charErrors.join(" "),
+        variant: "destructive"
+      });
+      setConfirmOpen(false);
+      return;
+    }
     if (missing.length > 0) {
       toast({
         title: "Campos obrigatórios",
@@ -269,10 +294,24 @@ const SubmissionForm = ({ editalId, editalTitle, editalEndDate, onBack }: Submis
     const disabled = isSubmitted;
 
     switch (q.type) {
+      case "text":
       case "short_text":
-        return <Input value={val} onChange={e => updateAnswer(q.id, e.target.value)} placeholder="Resposta..." disabled={disabled} />;
-      case "long_text":
+      case "long_text": {
+        const rules = q.validation_rules;
+        if (rules?.max_chars) {
+          return (
+            <TextFieldWithCounter
+              value={val}
+              onChange={v => updateAnswer(q.id, v)}
+              maxChars={rules.max_chars}
+              minChars={rules.min_chars ?? undefined}
+              disabled={disabled}
+              placeholder="Resposta..."
+            />
+          );
+        }
         return <Textarea value={val} onChange={e => updateAnswer(q.id, e.target.value)} placeholder="Resposta..." rows={4} disabled={disabled} />;
+      }
       case "number":
         return <Input type="number" value={val} onChange={e => updateAnswer(q.id, e.target.value)} placeholder="0" disabled={disabled} />;
       case "date":

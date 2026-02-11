@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { TextFieldWithCounter } from "@/components/ui/text-field-with-counter";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, Save } from "lucide-react";
 
@@ -33,6 +34,7 @@ interface SnapshotQuestion {
   help_text: string | null;
   is_required: boolean;
   options_source: string | null;
+  validation_rules?: { min_chars?: number | null; max_chars?: number | null } | null;
   sort_order: number;
   manual_options?: { value: string; label: string }[];
 }
@@ -147,10 +149,23 @@ const FormPreview = ({ formId, editalId, onBack }: FormPreviewProps) => {
     const val = answers[q.id] || "";
 
     switch (q.type) {
+      case "text":
       case "short_text":
-        return <Input value={val} onChange={e => updateAnswer(q.id, e.target.value)} placeholder="Resposta..." />;
-      case "long_text":
+      case "long_text": {
+        const rules = q.validation_rules;
+        if (rules?.max_chars) {
+          return (
+            <TextFieldWithCounter
+              value={val}
+              onChange={v => updateAnswer(q.id, v)}
+              maxChars={rules.max_chars}
+              minChars={rules.min_chars ?? undefined}
+              placeholder="Resposta..."
+            />
+          );
+        }
         return <Textarea value={val} onChange={e => updateAnswer(q.id, e.target.value)} placeholder="Resposta..." rows={4} />;
+      }
       case "number":
         return <Input type="number" value={val} onChange={e => updateAnswer(q.id, e.target.value)} placeholder="0" />;
       case "date":
