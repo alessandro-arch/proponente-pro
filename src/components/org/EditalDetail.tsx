@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, Send, Lock, Plus, FileText, Settings, Inbox, ClipboardCheck, AlertTriangle, Trash2, RotateCcw, Copy } from "lucide-react";
+import { Loader2, ArrowLeft, Send, Lock, Plus, FileText, Settings, Inbox, ClipboardCheck, AlertTriangle, Trash2, Copy } from "lucide-react";
 import FormKnowledgeAreas from "@/components/org/FormKnowledgeAreas";
 import FormSectionBuilder from "@/components/org/FormSectionBuilder";
 import FormPreview from "@/components/org/FormPreview";
@@ -17,7 +18,15 @@ import SubmissionsList from "@/components/org/SubmissionsList";
 import ReviewManagement from "@/components/org/ReviewManagement";
 import ScoringCriteriaManager from "@/components/org/ScoringCriteriaManager";
 import IdentityReveal from "@/components/org/IdentityReveal";
-import { getComputedStatus, getStatusVariant, type ComputedEditalStatus } from "@/lib/edital-status";
+import EditalWorkflowStepper from "@/components/org/EditalWorkflowStepper";
+import {
+  getComputedStatus,
+  getStatusVariant,
+  getAllowedTransitions,
+  type ComputedEditalStatus,
+  type DbEditalStatus,
+  type WorkflowTransition,
+} from "@/lib/edital-status";
 
 interface Edital {
   id: string;
@@ -41,12 +50,14 @@ const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; 
   const [editingDates, setEditingDates] = useState(false);
   const [tempStart, setTempStart] = useState("");
   const [tempEnd, setTempEnd] = useState("");
-  const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  const [confirmReopenOpen, setConfirmReopenOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [reopening, setReopening] = useState(false);
-  const [reopenEndDate, setReopenEndDate] = useState("");
+
+  // Workflow transition state
+  const [transitionDialogOpen, setTransitionDialogOpen] = useState(false);
+  const [pendingTransition, setPendingTransition] = useState<WorkflowTransition | null>(null);
+  const [transitionInput, setTransitionInput] = useState("");
+  const [transitioning, setTransitioning] = useState(false);
 
   // Form state
   const [formId, setFormId] = useState<string | null>(null);
@@ -57,16 +68,16 @@ const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; 
   const [publishing, setPublishing] = useState(false);
 
   const computedStatus = getComputedStatus(dbStatus, startDate, endDate);
-  const isEncerrado = computedStatus === "Encerrado";
+  const isReadOnly = ["Encerrado", "Em Avaliação", "Resultado Preliminar", "Resultado Final", "Homologado", "Outorgado", "Cancelado"].includes(computedStatus);
   const isRascunho = computedStatus === "Rascunho";
+  const isCancelled = dbStatus === "cancelado";
   const isGestorMaster = globalRole === "icca_admin" || membership?.role === "org_admin";
-  
-  // Dates editable: Rascunho/Agendado by anyone with access, or Published by Gestor Master only
+
   const canEditDates = isRascunho || computedStatus === "Agendado" || (dbStatus === "published" && isGestorMaster);
 
-  useEffect(() => {
-    loadForm();
-  }, [edital.id]);
+  const allowedTransitions = isGestorMaster ? getAllowedTransitions(dbStatus, startDate, endDate) : [];
+
+  useEffect(() => { loadForm(); }, [edital.id]);
 
   const loadForm = async () => {
     setLoadingForm(true);
@@ -85,11 +96,7 @@ const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; 
     setCreatingForm(true);
     const { data, error } = await supabase
       .from("edital_forms")
-      .insert({
-        edital_id: edital.id,
-        organization_id: orgId,
-        status: "draft",
-      })
+      .insert({ edital_id: edital.id, organization_id: orgId, status: "draft" })
       .select()
       .single();
     setCreatingForm(false);
@@ -103,7 +110,6 @@ const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; 
   };
 
   const handlePublishEdital = async () => {
-    // 1. Validate required fields
     if (!edital.title?.trim()) {
       toast({ title: "Título obrigatório", description: "O edital precisa de um título.", variant: "destructive" });
       return;
@@ -112,7 +118,6 @@ const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; 
       toast({ title: "Descrição obrigatória", description: "O edital precisa de uma descrição.", variant: "destructive" });
       return;
     }
-    // 2. Validate dates
     if (!startDate || !endDate) {
       toast({ title: "Datas obrigatórias", description: "Defina as datas de abertura e encerramento antes de publicar.", variant: "destructive" });
       return;
@@ -121,18 +126,18 @@ const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; 
       toast({ title: "Datas inválidas", description: "A data de encerramento deve ser posterior à de abertura.", variant: "destructive" });
       return;
     }
-    // 3. Validate form has at least 1 section + 1 question
     if (!formId) {
       toast({ title: "Formulário necessário", description: "Crie e configure o formulário antes de publicar.", variant: "destructive" });
       return;
     }
 
     setPublishing(true);
-    const [secRes, qRes] = await Promise.all([
+    const [secRes, qRes, criteriaRes] = await Promise.all([
       supabase.from("form_sections").select("id").eq("form_id", formId),
       supabase.from("form_questions").select("id").eq("form_id", formId),
+      supabase.from("scoring_criteria").select("id").eq("edital_id", edital.id),
     ]);
-    
+
     if (!secRes.data || secRes.data.length === 0) {
       toast({ title: "Formulário incompleto", description: "Adicione pelo menos 1 seção ao formulário.", variant: "destructive" });
       setPublishing(false);
@@ -143,36 +148,23 @@ const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; 
       setPublishing(false);
       return;
     }
+    if (!criteriaRes.data || criteriaRes.data.length === 0) {
+      toast({ title: "Critérios obrigatórios", description: "Defina pelo menos 1 critério de avaliação antes de publicar.", variant: "destructive" });
+      setPublishing(false);
+      return;
+    }
 
-    // 4. Update status + published_at
     const { error } = await supabase
       .from("editais")
-      .update({ 
-        status: "published" as "draft" | "published" | "closed",
-        published_at: new Date().toISOString(),
-      } as any)
+      .update({ status: "published" as any, published_at: new Date().toISOString() } as any)
       .eq("id", edital.id);
-    
+
     setPublishing(false);
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     } else {
       setDbStatus("published");
       toast({ title: "Edital publicado com sucesso!" });
-    }
-  };
-
-  const handleCloseEdital = async () => {
-    const { error } = await supabase
-      .from("editais")
-      .update({ status: "closed" as "draft" | "published" | "closed" })
-      .eq("id", edital.id);
-    setConfirmCloseOpen(false);
-    if (error) {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
-    } else {
-      setDbStatus("closed");
-      toast({ title: "Edital encerrado! Submissões bloqueadas." });
     }
   };
 
@@ -202,33 +194,77 @@ const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; 
     }
   };
 
-  const handleReopenEdital = async () => {
-    if (!reopenEndDate) {
-      toast({ title: "Data obrigatória", description: "Informe a nova data de encerramento.", variant: "destructive" });
+  const openTransitionDialog = (transition: WorkflowTransition) => {
+    setPendingTransition(transition);
+    setTransitionInput("");
+    setTransitionDialogOpen(true);
+  };
+
+  const handleTransition = async () => {
+    if (!pendingTransition || !user) return;
+
+    // Validate required inputs
+    if (pendingTransition.requiresInput === "end_date") {
+      if (!transitionInput) {
+        toast({ title: "Data obrigatória", description: "Informe a nova data de encerramento.", variant: "destructive" });
+        return;
+      }
+      if (new Date(transitionInput) <= new Date()) {
+        toast({ title: "Data inválida", description: "A nova data deve ser futura.", variant: "destructive" });
+        return;
+      }
+    }
+    if (pendingTransition.requiresInput === "cancellation_reason" && !transitionInput.trim()) {
+      toast({ title: "Justificativa obrigatória", description: "Informe o motivo do cancelamento.", variant: "destructive" });
       return;
     }
-    const newEnd = new Date(reopenEndDate);
-    if (newEnd <= new Date()) {
-      toast({ title: "Data inválida", description: "A nova data de encerramento deve ser futura.", variant: "destructive" });
-      return;
+
+    setTransitioning(true);
+
+    const updatePayload: Record<string, any> = {
+      status: pendingTransition.targetStatus,
+    };
+
+    if (pendingTransition.requiresInput === "end_date") {
+      updatePayload.end_date = new Date(transitionInput).toISOString();
     }
-    setReopening(true);
+    if (pendingTransition.requiresInput === "cancellation_reason") {
+      updatePayload.cancellation_reason = transitionInput.trim();
+    }
+
     const { error } = await supabase
       .from("editais")
-      .update({
-        status: "published" as "draft" | "published" | "closed",
-        end_date: newEnd.toISOString(),
-      })
+      .update(updatePayload as any)
       .eq("id", edital.id);
-    setReopening(false);
-    setConfirmReopenOpen(false);
+
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
-    } else {
-      setDbStatus("published");
-      setEndDate(newEnd.toISOString());
-      toast({ title: "Edital reaberto! Novas submissões permitidas." });
+      setTransitioning(false);
+      return;
     }
+
+    // Audit log
+    await supabase.from("audit_logs").insert({
+      user_id: user.id,
+      organization_id: orgId,
+      entity: "edital",
+      entity_id: edital.id,
+      action: `edital.${pendingTransition.targetStatus}`,
+      metadata_json: {
+        from_status: dbStatus,
+        to_status: pendingTransition.targetStatus,
+        ...(pendingTransition.requiresInput === "end_date" && { new_end_date: transitionInput }),
+        ...(pendingTransition.requiresInput === "cancellation_reason" && { reason: transitionInput.trim() }),
+      },
+    });
+
+    setDbStatus(pendingTransition.targetStatus);
+    if (pendingTransition.requiresInput === "end_date") {
+      setEndDate(new Date(transitionInput).toISOString());
+    }
+    setTransitioning(false);
+    setTransitionDialogOpen(false);
+    toast({ title: `Status atualizado para "${pendingTransition.label}"` });
   };
 
   const handleSaveDates = async () => {
@@ -265,52 +301,40 @@ const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; 
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
+  const showFormTab = true;
+  const showSubmissionsTab = true;
+  const showReviewsTab = !isRascunho;
+  const showSettingsTab = isRascunho || dbStatus === "published";
+
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-3 mb-4">
         <Button variant="ghost" size="sm" onClick={onBack}>
           <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
         </Button>
         <div className="flex-1">
           <h2 className="text-xl font-bold font-heading text-foreground">{edital.title}</h2>
           <div className="flex items-center gap-2 mt-1">
-            <Badge variant={getStatusVariant(computedStatus)}>
-              {computedStatus}
-            </Badge>
-            {isEncerrado && (
+            <Badge variant={getStatusVariant(computedStatus)}>{computedStatus}</Badge>
+            {isReadOnly && !isCancelled && (
               <span className="text-xs text-muted-foreground">(somente leitura)</span>
             )}
           </div>
         </div>
         <div className="flex gap-2">
-          {/* Rascunho: Publicar */}
           {dbStatus === "draft" && (
             <Button size="sm" onClick={handlePublishEdital} disabled={publishing}>
               {publishing && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
               <Send className="w-4 h-4 mr-1" /> Publicar
             </Button>
           )}
-          {/* Publicado (não encerrado por data): Encerrar */}
-          {dbStatus === "published" && computedStatus !== "Encerrado" && (
-            <Button size="sm" variant="secondary" onClick={() => setConfirmCloseOpen(true)}>
-              <Lock className="w-4 h-4 mr-1" /> Encerrar
-            </Button>
-          )}
-          {/* Encerrado: Reabrir */}
-          {isEncerrado && isGestorMaster && (
-            <Button size="sm" variant="outline" onClick={() => { setReopenEndDate(""); setConfirmReopenOpen(true); }}>
-              <RotateCcw className="w-4 h-4 mr-1" /> Reabrir
-            </Button>
-          )}
-          {/* Excluir (Rascunho or Publicado sem submissões) */}
-          {(dbStatus === "draft" || dbStatus === "published") && isGestorMaster && (
+          {dbStatus === "draft" && isGestorMaster && (
             <Button size="sm" variant="destructive" onClick={() => setConfirmDeleteOpen(true)}>
               <Trash2 className="w-4 h-4 mr-1" /> Excluir
             </Button>
           )}
-          {/* Duplicar */}
-          {isGestorMaster && onDuplicate && (
+          {isGestorMaster && onDuplicate && !isCancelled && (
             <Button size="sm" variant="outline" onClick={() => onDuplicate(edital)}>
               <Copy className="w-4 h-4 mr-1" /> Duplicar
             </Button>
@@ -318,23 +342,50 @@ const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; 
         </div>
       </div>
 
+      {/* Workflow Stepper */}
+      <div className="mb-6">
+        <EditalWorkflowStepper currentStatus={dbStatus} isCancelled={isCancelled} />
+      </div>
+
+      {/* Workflow Actions */}
+      {allowedTransitions.length > 0 && (
+        <Card className="mb-6">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">Ações do Workflow</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {allowedTransitions.map((t) => (
+                <Button
+                  key={t.targetStatus}
+                  size="sm"
+                  variant={t.variant}
+                  onClick={() => openTransitionDialog(t)}
+                >
+                  {t.label}
+                </Button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Tabs */}
       <Tabs defaultValue="overview">
         <TabsList className="mb-6">
           <TabsTrigger value="overview">Visão Geral</TabsTrigger>
-          {/* Rascunho: Configurar Formulário */}
           <TabsTrigger value="form">
             {isRascunho ? "Configurar Formulário" : "Formulário"}
           </TabsTrigger>
           <TabsTrigger value="submissions">
             <Inbox className="w-4 h-4 mr-1" /> Submissões
           </TabsTrigger>
-          {!isRascunho && (
+          {showReviewsTab && (
             <TabsTrigger value="reviews">
               <ClipboardCheck className="w-4 h-4 mr-1" /> Avaliação
             </TabsTrigger>
           )}
-          {!isEncerrado && (
+          {showSettingsTab && (
             <TabsTrigger value="settings">
               <Settings className="w-4 h-4 mr-1" /> Configurações
             </TabsTrigger>
@@ -377,8 +428,7 @@ const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; 
                 </div>
               </div>
 
-              {/* Edit dates */}
-              {canEditDates && !isEncerrado && (
+              {canEditDates && !isReadOnly && (
                 <div className="pt-2">
                   {!editingDates ? (
                     <Button size="sm" variant="outline" onClick={() => {
@@ -417,10 +467,10 @@ const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; 
 
         {/* Formulário */}
         <TabsContent value="form">
-          {isEncerrado && (
+          {isReadOnly && (
             <div className="flex items-center gap-3 p-4 rounded-lg border border-muted bg-muted/30 mb-4">
               <AlertTriangle className="w-5 h-5 text-muted-foreground shrink-0" />
-              <p className="text-sm text-muted-foreground">Edital encerrado — formulário em modo somente leitura.</p>
+              <p className="text-sm text-muted-foreground">Formulário em modo somente leitura.</p>
             </div>
           )}
           {loadingForm ? (
@@ -433,7 +483,7 @@ const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; 
                 <CardContent className="py-12 text-center">
                   <FileText className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                   <p className="text-muted-foreground mb-4">Nenhum formulário criado para este edital.</p>
-                  {!isEncerrado && (
+                  {!isReadOnly && (
                     <Button onClick={handleCreateForm} disabled={creatingForm}>
                       {creatingForm && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
                       <Plus className="w-4 h-4 mr-2" /> Criar Formulário
@@ -466,14 +516,14 @@ const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; 
         </TabsContent>
 
         {/* Avaliação */}
-        {!isRascunho && (
+        {showReviewsTab && (
           <TabsContent value="reviews">
             <ReviewManagement editalId={edital.id} editalTitle={edital.title} />
           </TabsContent>
         )}
 
         {/* Configurações */}
-        {!isEncerrado && (
+        {showSettingsTab && (
           <TabsContent value="settings">
             <div className="space-y-6">
               <ScoringCriteriaManager editalId={edital.id} />
@@ -488,25 +538,7 @@ const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; 
         )}
       </Tabs>
 
-      {/* Confirm close dialog */}
-      <Dialog open={confirmCloseOpen} onOpenChange={setConfirmCloseOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Encerrar Edital</DialogTitle>
-            <DialogDescription>
-              Ao encerrar, novas submissões serão <strong>bloqueadas imediatamente</strong>. O edital ficará em modo somente leitura. Esta ação não pode ser desfeita.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setConfirmCloseOpen(false)}>Cancelar</Button>
-            <Button variant="destructive" onClick={handleCloseEdital}>
-              <Lock className="w-4 h-4 mr-1" /> Confirmar encerramento
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Confirm delete dialog */}
+      {/* Delete dialog */}
       <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
         <DialogContent>
           <DialogHeader>
@@ -525,29 +557,54 @@ const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; 
         </DialogContent>
       </Dialog>
 
-      {/* Confirm reopen dialog */}
-      <Dialog open={confirmReopenOpen} onOpenChange={setConfirmReopenOpen}>
+      {/* Workflow transition dialog */}
+      <Dialog open={transitionDialogOpen} onOpenChange={setTransitionDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reabrir Edital</DialogTitle>
+            <DialogTitle>{pendingTransition?.label}</DialogTitle>
             <DialogDescription>
-              Defina uma nova data de encerramento para reabrir o edital e permitir novas submissões.
+              {pendingTransition?.description}
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <Label>Nova data/hora de encerramento <span className="text-destructive">*</span></Label>
-            <Input
-              type="datetime-local"
-              value={reopenEndDate}
-              onChange={e => setReopenEndDate(e.target.value)}
-              className="mt-1"
-            />
+          <div className="py-4 space-y-4">
+            {pendingTransition?.requiresInput === "end_date" && (
+              <div>
+                <Label>Nova data/hora de encerramento <span className="text-destructive">*</span></Label>
+                <Input
+                  type="datetime-local"
+                  value={transitionInput}
+                  onChange={e => setTransitionInput(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+            )}
+            {pendingTransition?.requiresInput === "cancellation_reason" && (
+              <div>
+                <Label>Justificativa do cancelamento <span className="text-destructive">*</span></Label>
+                <Textarea
+                  value={transitionInput}
+                  onChange={e => setTransitionInput(e.target.value)}
+                  placeholder="Informe o motivo do cancelamento..."
+                  className="mt-1"
+                  rows={3}
+                />
+              </div>
+            )}
+            {!pendingTransition?.requiresInput && (
+              <p className="text-sm text-muted-foreground">
+                Confirma a transição do edital para <strong>{pendingTransition?.label}</strong>?
+              </p>
+            )}
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setConfirmReopenOpen(false)}>Cancelar</Button>
-            <Button onClick={handleReopenEdital} disabled={reopening}>
-              {reopening && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
-              <RotateCcw className="w-4 h-4 mr-1" /> Confirmar reabertura
+            <Button variant="outline" onClick={() => setTransitionDialogOpen(false)}>Cancelar</Button>
+            <Button
+              variant={pendingTransition?.variant === "destructive" ? "destructive" : "default"}
+              onClick={handleTransition}
+              disabled={transitioning}
+            >
+              {transitioning && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
+              Confirmar
             </Button>
           </DialogFooter>
         </DialogContent>

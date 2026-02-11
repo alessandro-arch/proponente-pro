@@ -205,6 +205,7 @@ export type Database = {
       editais: {
         Row: {
           blind_review_enabled: boolean
+          cancellation_reason: string | null
           created_at: string
           created_by: string
           deleted_at: string | null
@@ -222,6 +223,7 @@ export type Database = {
         }
         Insert: {
           blind_review_enabled?: boolean
+          cancellation_reason?: string | null
           created_at?: string
           created_by: string
           deleted_at?: string | null
@@ -239,6 +241,7 @@ export type Database = {
         }
         Update: {
           blind_review_enabled?: boolean
+          cancellation_reason?: string | null
           created_at?: string
           created_by?: string
           deleted_at?: string | null
@@ -2004,7 +2007,16 @@ export type Database = {
         | "edital_manager"
         | "proponente"
         | "reviewer"
-      edital_status: "draft" | "published" | "closed"
+      edital_status:
+        | "draft"
+        | "published"
+        | "closed"
+        | "em_avaliacao"
+        | "resultado_preliminar"
+        | "resultado_final"
+        | "homologado"
+        | "outorgado"
+        | "cancelado"
       proposal_status:
         | "draft"
         | "submitted"
@@ -2145,7 +2157,17 @@ export const Constants = {
         "proponente",
         "reviewer",
       ],
-      edital_status: ["draft", "published", "closed"],
+      edital_status: [
+        "draft",
+        "published",
+        "closed",
+        "em_avaliacao",
+        "resultado_preliminar",
+        "resultado_final",
+        "homologado",
+        "outorgado",
+        "cancelado",
+      ],
       proposal_status: [
         "draft",
         "submitted",
