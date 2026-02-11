@@ -92,7 +92,14 @@ const ScoringCriteriaManager = ({ editalId }: { editalId: string }) => {
         <CardTitle className="text-lg flex items-center gap-2">
           <BarChart3 className="w-5 h-5" /> Barema de Avaliação
         </CardTitle>
-        <CardDescription>Configure os critérios de avaliação para este edital. Peso total atual: <strong>{totalWeight.toFixed(1)}</strong></CardDescription>
+        <CardDescription>
+          Configure os critérios de avaliação para este edital. Adicione quantos critérios desejar.
+          <span className={`ml-1 font-semibold ${totalWeight === 100 ? "text-success" : totalWeight > 100 ? "text-destructive" : "text-warning-foreground"}`}>
+            Peso total: {totalWeight.toFixed(1)} / 100
+            {totalWeight === 100 && " ✓"}
+            {totalWeight !== 100 && ` (${totalWeight < 100 ? "faltam " + (100 - totalWeight).toFixed(1) : "excede em " + (totalWeight - 100).toFixed(1)})`}
+          </span>
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Existing criteria */}
