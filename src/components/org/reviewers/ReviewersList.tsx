@@ -5,13 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Loader2, Plus, Search, Eye, MoreVertical, Ban, RefreshCw, UserCheck, Trash2, Filter, X } from "lucide-react";
+import { Loader2, Plus, Search, Eye, MoreVertical, Ban, RefreshCw, UserCheck, Trash2, Filter, X, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import NewReviewerModal from "./NewReviewerModal";
+import EditReviewerModal from "./EditReviewerModal";
+import DeleteReviewerDialog from "./DeleteReviewerDialog";
 
 interface Props {
   orgId: string;
@@ -56,6 +58,8 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [areaFilter, setAreaFilter] = useState<string[]>([]);
   const [showNewModal, setShowNewModal] = useState(false);
+  const [editingReviewer, setEditingReviewer] = useState<any | null>(null);
+  const [deletingReviewer, setDeletingReviewer] = useState<any | null>(null);
   const queryClient = useQueryClient();
 
   const { data: reviewers, isLoading } = useQuery({
@@ -73,7 +77,6 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
     },
   });
 
-  // Extract unique areas from all reviewers for filter options
   const allAreas = (() => {
     const set = new Map<string, string>();
     reviewers?.forEach((r) => {
@@ -128,7 +131,6 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
   });
 
   const filtered = reviewers?.filter((r) => {
-    // Text search
     if (search) {
       const q = search.toLowerCase();
       const match = r.full_name.toLowerCase().includes(q) ||
@@ -136,7 +138,6 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
         r.institution.toLowerCase().includes(q);
       if (!match) return false;
     }
-    // Area filter
     if (areaFilter.length > 0) {
       const areas: any[] = Array.isArray(r.areas) ? r.areas : [];
       const reviewerAreas = areas.map((a: any) => getAreaLabel(a));
@@ -183,7 +184,6 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
             </SelectContent>
           </Select>
 
-          {/* Area filter dropdown */}
           {allAreas.length > 0 && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -215,7 +215,6 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
           )}
         </div>
 
-        {/* Active area filters */}
         {areaFilter.length > 0 && (
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-xs text-muted-foreground">Filtros:</span>
@@ -250,7 +249,6 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
           </div>
         ) : (
           <div className="border border-border rounded-lg bg-card overflow-hidden">
-            {/* Header */}
             <div className="grid grid-cols-[1fr_minmax(120px,1fr)_minmax(140px,1.2fr)_90px_90px_40px] gap-3 px-4 py-2.5 bg-muted/50 border-b border-border text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
               <span>Avaliador</span>
               <span className="hidden sm:block">Instituição</span>
@@ -260,7 +258,6 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
               <span />
             </div>
 
-            {/* Rows */}
             <div className="divide-y divide-border">
               {filtered.map((r) => {
                 const areas: any[] = Array.isArray(r.areas) ? r.areas : [];
@@ -272,13 +269,11 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
                     key={r.id}
                     className="grid grid-cols-[1fr_minmax(120px,1fr)_minmax(140px,1.2fr)_90px_90px_40px] gap-3 items-center px-4 py-3 hover:bg-muted/30 transition-colors"
                   >
-                    {/* Name + Email */}
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-foreground truncate leading-tight">{r.full_name}</p>
                       <p className="text-xs text-muted-foreground truncate mt-0.5">{r.email}</p>
                     </div>
 
-                    {/* Institution */}
                     <div className="min-w-0 hidden sm:block">
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -288,7 +283,6 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
                       </Tooltip>
                     </div>
 
-                    {/* Area */}
                     <div className="min-w-0 hidden md:flex items-center gap-1.5">
                       {primary ? (
                         <>
@@ -304,9 +298,7 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
                           {secondary && (
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <span className="text-[10px] text-primary/70 whitespace-nowrap cursor-default font-medium">
-                                  +1
-                                </span>
+                                <span className="text-[10px] text-primary/70 whitespace-nowrap cursor-default font-medium">+1</span>
                               </TooltipTrigger>
                               <TooltipContent side="top" className="max-w-xs">
                                 <p className="text-xs">{secondary}</p>
@@ -319,21 +311,18 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
                       )}
                     </div>
 
-                    {/* Status */}
                     <div>
                       <Badge variant={STATUS_VARIANTS[r.status] || "outline"} className="text-[10px]">
                         {STATUS_LABELS[r.status] || r.status}
                       </Badge>
                     </div>
 
-                    {/* Created at */}
                     <div className="hidden lg:block">
                       <span className="text-[11px] text-muted-foreground">
                         {format(new Date(r.created_at), "dd/MM/yy", { locale: ptBR })}
                       </span>
                     </div>
 
-                    {/* Actions */}
                     <div className="flex justify-end">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -341,9 +330,12 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
                             <MoreVertical className="w-3.5 h-3.5" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuContent align="end" className="w-48">
                           <DropdownMenuItem onClick={() => onViewReviewer(r.id)}>
                             <Eye className="w-3.5 h-3.5 mr-2" /> Ver detalhes
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setEditingReviewer(r)}>
+                            <Pencil className="w-3.5 h-3.5 mr-2" /> Editar
                           </DropdownMenuItem>
                           {(r.status === "INVITED" || r.status === "PENDING") && (
                             <DropdownMenuItem onClick={() => resendInviteMutation.mutate({ id: r.id })}>
@@ -363,14 +355,13 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
                               <UserCheck className="w-3.5 h-3.5 mr-2" /> Reativar
                             </DropdownMenuItem>
                           )}
-                          {r.status !== "DISABLED" && (
-                            <DropdownMenuItem
-                              onClick={() => toggleStatusMutation.mutate({ id: r.id, newStatus: "DISABLED" })}
-                              className="text-destructive focus:text-destructive"
-                            >
-                              <Trash2 className="w-3.5 h-3.5 mr-2" /> Desativar
-                            </DropdownMenuItem>
-                          )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => setDeletingReviewer(r)}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 mr-2" /> Excluir
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
@@ -382,6 +373,24 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
         )}
 
         <NewReviewerModal open={showNewModal} onOpenChange={setShowNewModal} orgId={orgId} />
+
+        {editingReviewer && (
+          <EditReviewerModal
+            open={!!editingReviewer}
+            onOpenChange={(v) => { if (!v) setEditingReviewer(null); }}
+            orgId={orgId}
+            reviewer={editingReviewer}
+          />
+        )}
+
+        {deletingReviewer && (
+          <DeleteReviewerDialog
+            open={!!deletingReviewer}
+            onOpenChange={(v) => { if (!v) setDeletingReviewer(null); }}
+            orgId={orgId}
+            reviewer={deletingReviewer}
+          />
+        )}
       </div>
     </TooltipProvider>
   );

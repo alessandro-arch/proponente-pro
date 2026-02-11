@@ -1,13 +1,16 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, ArrowLeft, Ban, UserCheck, RefreshCw, ExternalLink, AlertTriangle } from "lucide-react";
+import { Loader2, ArrowLeft, Ban, UserCheck, RefreshCw, ExternalLink, AlertTriangle, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import EditReviewerModal from "./EditReviewerModal";
+import DeleteReviewerDialog from "./DeleteReviewerDialog";
 
 interface Props {
   reviewerId: string;
@@ -29,6 +32,7 @@ const AUDIT_LABELS: Record<string, string> = {
   REVIEWER_INVITE_SENT: "Convite enviado",
   REVIEWER_TERMS_ACCEPTED: "Termos aceitos",
   REVIEWER_STATUS_CHANGED: "Status alterado",
+  REVIEWER_DELETED: "Avaliador excluído",
 };
 
 function getAreaLabel(a: any): string {
@@ -50,6 +54,8 @@ function getSecondaryArea(areas: any[]): string | null {
 
 const ReviewerDetail = ({ reviewerId, orgId, onBack }: Props) => {
   const queryClient = useQueryClient();
+  const [showEdit, setShowEdit] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
 
   const { data: reviewer, isLoading } = useQuery({
     queryKey: ["reviewer", reviewerId],
@@ -145,13 +151,17 @@ const ReviewerDetail = ({ reviewerId, orgId, onBack }: Props) => {
           <h1 className="text-2xl font-bold font-heading text-foreground">{reviewer.full_name}</h1>
           <p className="text-sm text-muted-foreground">{reviewer.email}</p>
         </div>
-        <Badge variant={reviewer.status === "ACTIVE" ? "default" : reviewer.status === "SUSPENDED" ? "destructive" : "outline"}>
-          {STATUS_LABELS[reviewer.status] || reviewer.status}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setShowEdit(true)}>
+            <Pencil className="w-3.5 h-3.5 mr-1.5" /> Editar
+          </Button>
+          <Badge variant={reviewer.status === "ACTIVE" ? "default" : reviewer.status === "SUSPENDED" ? "destructive" : "outline"}>
+            {STATUS_LABELS[reviewer.status] || reviewer.status}
+          </Badge>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Dados cadastrais */}
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-lg">Dados Cadastrais</CardTitle>
@@ -250,16 +260,18 @@ const ReviewerDetail = ({ reviewerId, orgId, onBack }: Props) => {
                   <RefreshCw className="w-4 h-4 mr-1" /> Reenviar Convite
                 </Button>
               )}
-              {reviewer.status !== "DISABLED" && (
-                <Button variant="ghost" size="sm" className="text-destructive" onClick={() => toggleStatusMutation.mutate("DISABLED")}>
-                  Desativar
-                </Button>
-              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive"
+                onClick={() => setShowDelete(true)}
+              >
+                <Trash2 className="w-4 h-4 mr-1" /> Excluir
+              </Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* Sidebar */}
         <div className="space-y-6">
           <Card>
             <CardHeader>
@@ -304,6 +316,24 @@ const ReviewerDetail = ({ reviewerId, orgId, onBack }: Props) => {
           </Card>
         </div>
       </div>
+
+      {showEdit && (
+        <EditReviewerModal
+          open={showEdit}
+          onOpenChange={setShowEdit}
+          orgId={orgId}
+          reviewer={reviewer as any}
+        />
+      )}
+
+      {showDelete && (
+        <DeleteReviewerDialog
+          open={showDelete}
+          onOpenChange={(v) => { setShowDelete(v); if (!v && !reviewer) onBack(); }}
+          orgId={orgId}
+          reviewer={{ id: reviewer.id, full_name: reviewer.full_name, status: reviewer.status }}
+        />
+      )}
     </div>
   );
 };
