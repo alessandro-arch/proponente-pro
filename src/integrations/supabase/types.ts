@@ -870,6 +870,45 @@ export type Database = {
           },
         ]
       }
+      institutions: {
+        Row: {
+          category: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          municipio: string | null
+          name: string
+          organization_type: string | null
+          sigla: string | null
+          source: string
+          uf: string | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          municipio?: string | null
+          name: string
+          organization_type?: string | null
+          sigla?: string | null
+          source?: string
+          uf?: string | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          municipio?: string | null
+          name?: string
+          organization_type?: string | null
+          sigla?: string | null
+          source?: string
+          uf?: string | null
+        }
+        Relationships: []
+      }
       knowledge_areas: {
         Row: {
           code: string | null
@@ -1007,6 +1046,9 @@ export type Database = {
           id: string
           instagram_url: string | null
           institution_affiliation: string | null
+          institution_custom_name: string | null
+          institution_id: string | null
+          institution_type: string | null
           keywords: string[] | null
           lattes_url: string | null
           linkedin_url: string | null
@@ -1039,6 +1081,9 @@ export type Database = {
           id?: string
           instagram_url?: string | null
           institution_affiliation?: string | null
+          institution_custom_name?: string | null
+          institution_id?: string | null
+          institution_type?: string | null
           keywords?: string[] | null
           lattes_url?: string | null
           linkedin_url?: string | null
@@ -1071,6 +1116,9 @@ export type Database = {
           id?: string
           instagram_url?: string | null
           institution_affiliation?: string | null
+          institution_custom_name?: string | null
+          institution_id?: string | null
+          institution_type?: string | null
           keywords?: string[] | null
           lattes_url?: string | null
           linkedin_url?: string | null
@@ -1087,7 +1135,15 @@ export type Database = {
           user_id?: string
           whatsapp?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_institution_id_fkey"
+            columns: ["institution_id"]
+            isOneToOne: false
+            referencedRelation: "institutions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       project_bank_accounts: {
         Row: {
@@ -1749,6 +1805,9 @@ export type Database = {
           full_name: string
           id: string
           institution: string
+          institution_custom_name: string | null
+          institution_id: string | null
+          institution_type: string | null
           invited_at: string | null
           keywords: string[] | null
           lattes_url: string | null
@@ -1767,6 +1826,9 @@ export type Database = {
           full_name: string
           id?: string
           institution: string
+          institution_custom_name?: string | null
+          institution_id?: string | null
+          institution_type?: string | null
           invited_at?: string | null
           keywords?: string[] | null
           lattes_url?: string | null
@@ -1785,6 +1847,9 @@ export type Database = {
           full_name?: string
           id?: string
           institution?: string
+          institution_custom_name?: string | null
+          institution_id?: string | null
+          institution_type?: string | null
           invited_at?: string | null
           keywords?: string[] | null
           lattes_url?: string | null
@@ -1795,6 +1860,13 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "reviewers_institution_id_fkey"
+            columns: ["institution_id"]
+            isOneToOne: false
+            referencedRelation: "institutions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "reviewers_org_id_fkey"
             columns: ["org_id"]

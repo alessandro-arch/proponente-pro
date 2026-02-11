@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Plus, Loader2, FileText, LogOut, Users, UserCircle } from "lucide-react";
+import { Building2, Plus, Loader2, FileText, LogOut, Users, UserCircle, Database } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 
 interface Org {
   id: string;
@@ -38,6 +39,32 @@ const AdminPanel = () => {
   };
 
   useEffect(() => { fetchOrgs(); }, []);
+
+  // Check institutions count
+  const { data: instCount } = useQuery({
+    queryKey: ["institutions-count"],
+    queryFn: async () => {
+      const { count } = await supabase.from("institutions").select("*", { count: "exact", head: true });
+      return count || 0;
+    },
+  });
+
+  const [seeding, setSeeding] = useState(false);
+  const seedInstitutions = async () => {
+    setSeeding(true);
+    try {
+      const resp = await fetch("/data/institutions-emec.csv");
+      const csvText = await resp.text();
+      const { data, error } = await supabase.functions.invoke("seed-institutions", {
+        body: { csvText },
+      });
+      if (error) throw error;
+      toast({ title: `Instituições importadas: ${data.inserted}` });
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    }
+    setSeeding(false);
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -158,6 +185,22 @@ const AdminPanel = () => {
             ))}
           </div>
         )}
+
+        {/* Institutions Seed Section */}
+        <div className="mt-10 border-t border-border pt-6">
+          <h3 className="text-lg font-semibold text-foreground mb-2 flex items-center gap-2">
+            <Database className="w-5 h-5 text-primary" /> Banco de Instituições (eMEC)
+          </h3>
+          <p className="text-sm text-muted-foreground mb-3">
+            {instCount != null ? `${instCount} instituições cadastradas.` : "Carregando..."}
+          </p>
+          {instCount === 0 && (
+            <Button onClick={seedInstitutions} disabled={seeding}>
+              {seeding && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Importar Lista eMEC (CSV)
+            </Button>
+          )}
+        </div>
       </main>
     </div>
   );

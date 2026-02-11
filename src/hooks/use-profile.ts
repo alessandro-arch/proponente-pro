@@ -21,6 +21,9 @@ export interface UserProfile {
   address_country: string | null;
   address_zipcode: string | null;
   institution_affiliation: string | null;
+  institution_id: string | null;
+  institution_custom_name: string | null;
+  institution_type: string | null;
   professional_position: string | null;
   lattes_url: string | null;
   instagram_url: string | null;
