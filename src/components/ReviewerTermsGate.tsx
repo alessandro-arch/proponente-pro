@@ -15,13 +15,10 @@ const ReviewerTermsGate = ({ children }: ReviewerTermsGateProps) => {
 
   useEffect(() => {
     const checkTerms = async () => {
-      if (!user) {
-        setChecking(false);
-        return;
-      }
+      if (!user) { setChecking(false); return; }
 
       const { data } = await supabase
-        .from("reviewers")
+        .from("reviewer_profiles" as any)
         .select("first_terms_accepted_at")
         .eq("user_id", user.id)
         .maybeSingle();
@@ -29,22 +26,11 @@ const ReviewerTermsGate = ({ children }: ReviewerTermsGateProps) => {
       setTermsAccepted(!!(data as any)?.first_terms_accepted_at);
       setChecking(false);
     };
-
     checkTerms();
   }, [user]);
 
-  if (checking) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (!termsAccepted) {
-    return <Navigate to="/reviewer/terms" replace />;
-  }
-
+  if (checking) return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+  if (!termsAccepted) return <Navigate to="/reviewer/terms" replace />;
   return <>{children}</>;
 };
 

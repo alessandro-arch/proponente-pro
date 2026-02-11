@@ -8,9 +8,7 @@ const corsHeaders = {
 };
 
 const handler = async (req: Request): Promise<Response> => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const { invite_code, password, cpf, full_name, institution, institution_id, institution_custom_name, institution_type, areas, keywords, lattes_url } = await req.json();
@@ -20,41 +18,20 @@ const handler = async (req: Request): Promise<Response> => {
     if (!full_name?.trim()) throw new Error("Full name is required");
 
     const code = invite_code.toUpperCase().trim();
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     // Validate invite
     const { data: invite, error: inviteErr } = await adminClient
-      .from("reviewer_invites")
-      .select("*")
-      .eq("invite_code", code)
-      .is("used_at", null)
-      .single();
+      .from("reviewer_invites").select("*").eq("invite_code", code).is("used_at", null).single();
 
     if (inviteErr || !invite) {
-      return new Response(
-        JSON.stringify({ error: "Código não encontrado ou já utilizado." }),
-        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+      return new Response(JSON.stringify({ error: "Código não encontrado ou já utilizado." }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
     }
-
     if (new Date(invite.expires_at) < new Date()) {
-      return new Response(
-        JSON.stringify({ error: "Este convite expirou." }),
-        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+      return new Response(JSON.stringify({ error: "Este convite expirou." }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
     }
-
-    // Get reviewer
-    const { data: reviewer, error: revErr } = await adminClient
-      .from("reviewers")
-      .select("*")
-      .eq("id", invite.reviewer_id)
-      .single();
-
-    if (revErr || !reviewer) throw new Error("Reviewer not found");
 
     // Hash CPF
     const cpfHash = await hashValue(cpf);
@@ -62,99 +39,77 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Check if user already exists
     const { data: existingUsers } = await adminClient.auth.admin.listUsers();
-    const existingUser = existingUsers?.users?.find(u => u.email === reviewer.email);
+    const email = invite.email;
+    const existingUser = existingUsers?.users?.find(u => u.email === email);
 
     let userId: string;
-
     if (existingUser) {
       userId = existingUser.id;
     } else {
       const { data: newUser, error: createErr } = await adminClient.auth.admin.createUser({
-        email: reviewer.email,
-        password,
-        email_confirm: true,
+        email, password, email_confirm: true,
         user_metadata: { full_name: full_name.trim() },
       });
       if (createErr) throw createErr;
       userId = newUser.user.id;
     }
 
+    // Update profile with personal data + cpf_hash
+    await adminClient.from("profiles").update({
+      full_name: full_name.trim(),
+      institution_id: institution_id || null,
+      institution_custom_name: institution_custom_name || null,
+      institution_type: institution_type || null,
+      lattes_url: lattes_url || null,
+      cpf: cpf,
+      cpf_hash: cpfHash,
+    }).eq("user_id", userId);
+
     // Add reviewer role in organization_members
-    await adminClient
-      .from("organization_members")
-      .upsert({
-        user_id: userId,
-        organization_id: invite.org_id,
-        role: "reviewer",
-      }, { onConflict: "user_id,organization_id" })
-      .select();
+    await adminClient.from("organization_members").upsert({
+      user_id: userId, organization_id: invite.org_id, role: "reviewer", status: "ativo",
+    }, { onConflict: "user_id,organization_id" }).select();
 
     // Add to user_roles
-    await adminClient
-      .from("user_roles")
-      .upsert({
-        user_id: userId,
-        role: "reviewer",
-      }, { onConflict: "user_id,role" })
-      .select();
+    await adminClient.from("user_roles").upsert({
+      user_id: userId, role: "reviewer",
+    }, { onConflict: "user_id,role" }).select();
 
-    // Update reviewer record with all data from the form
-    await adminClient
-      .from("reviewers")
-      .update({
-        user_id: userId,
-        full_name: full_name.trim(),
-        institution: institution?.trim() || reviewer.institution,
-        institution_id: institution_id || reviewer.institution_id,
-        institution_custom_name: institution_custom_name || reviewer.institution_custom_name,
-        institution_type: institution_type || reviewer.institution_type,
-        areas: areas && areas.length > 0 ? areas : reviewer.areas,
-        keywords: keywords && keywords.length > 0 ? keywords : reviewer.keywords,
-        lattes_url: lattes_url || reviewer.lattes_url,
-        status: "ACTIVE",
-        accepted_at: new Date().toISOString(),
-        cpf_hash: cpfHash,
-        cpf_last4: cpfLast4,
-        first_terms_accepted_at: new Date().toISOString(),
-        terms_version: "v1",
-      })
-      .eq("id", reviewer.id);
+    // Create reviewer_profiles entry
+    await adminClient.from("reviewer_profiles").upsert({
+      user_id: userId,
+      org_id: invite.org_id,
+      areas: areas && areas.length > 0 ? areas : (invite.areas || []),
+      keywords: keywords && keywords.length > 0 ? keywords : (invite.keywords || []),
+      orcid: invite.orcid || null,
+      bio: null,
+      accepted_at: new Date().toISOString(),
+      first_terms_accepted_at: new Date().toISOString(),
+      terms_version: "v1",
+    }, { onConflict: "user_id,org_id" }).select();
 
     // Mark invite as used
-    await adminClient
-      .from("reviewer_invites")
-      .update({ used_at: new Date().toISOString() })
-      .eq("id", invite.id);
+    await adminClient.from("reviewer_invites").update({ used_at: new Date().toISOString() }).eq("id", invite.id);
 
     // Audit log
     await adminClient.from("audit_logs").insert({
-      user_id: userId,
-      organization_id: invite.org_id,
-      entity: "reviewer",
-      entity_id: reviewer.id,
+      user_id: userId, organization_id: invite.org_id,
+      entity: "reviewer", entity_id: userId,
       action: "REVIEWER_TERMS_ACCEPTED",
-      metadata_json: { email: reviewer.email, method: "invite_code", terms_version: "v1", lgpd_accepted: true },
+      metadata_json: { email, method: "invite_code", terms_version: "v1", lgpd_accepted: true },
     });
 
-    return new Response(
-      JSON.stringify({ success: true }),
-      { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
-    );
+    return new Response(JSON.stringify({ success: true }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
   } catch (error: any) {
     console.error("Error accepting invite by code:", error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
-    );
+    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } });
   }
 };
 
 async function hashValue(value: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(value);
+  const data = new TextEncoder().encode(value);
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
 serve(handler);

@@ -8,9 +8,7 @@ const corsHeaders = {
 };
 
 const handler = async (req: Request): Promise<Response> => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const { token } = await req.json();
@@ -23,52 +21,34 @@ const handler = async (req: Request): Promise<Response> => {
     const tokenHash = await hashToken(token);
 
     const { data: invite, error } = await adminClient
-      .from("reviewer_invites")
-      .select("*")
-      .eq("token_hash", tokenHash)
-      .is("used_at", null)
-      .single();
+      .from("reviewer_invites").select("*").eq("token_hash", tokenHash).is("used_at", null).single();
 
     if (error || !invite) {
-      return new Response(
-        JSON.stringify({ error: "Convite não encontrado ou já utilizado." }),
-        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+      return new Response(JSON.stringify({ error: "Convite não encontrado ou já utilizado." }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
     }
-
     if (new Date(invite.expires_at) < new Date()) {
-      return new Response(
-        JSON.stringify({ error: "Este convite expirou. Solicite um novo à organização." }),
-        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+      return new Response(JSON.stringify({ error: "Este convite expirou. Solicite um novo à organização." }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
     }
 
-    // Get reviewer data (without sensitive info)
-    const { data: reviewer } = await adminClient
-      .from("reviewers")
-      .select("id, full_name, email, institution")
-      .eq("id", invite.reviewer_id)
-      .single();
-
-    return new Response(
-      JSON.stringify({ invite: { id: invite.id, expires_at: invite.expires_at }, reviewer }),
-      { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
-    );
+    // Return invite staging data directly
+    return new Response(JSON.stringify({
+      invite: { id: invite.id, expires_at: invite.expires_at },
+      reviewer: {
+        full_name: invite.full_name || null,
+        email: invite.email,
+        institution: invite.institution || null,
+      },
+    }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
   } catch (error: any) {
     console.error("Error validating invite:", error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
-    );
+    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } });
   }
 };
 
 async function hashToken(token: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(token);
+  const data = new TextEncoder().encode(token);
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
 serve(handler);

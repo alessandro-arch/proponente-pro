@@ -21,20 +21,35 @@ interface Props {
   onViewReviewer: (id: string) => void;
 }
 
+export interface ReviewerListItem {
+  _type: "active" | "invite";
+  _id: string;
+  user_id?: string;
+  full_name: string;
+  email: string;
+  institution: string;
+  institution_custom_name?: string | null;
+  institution_type?: string | null;
+  areas: any[];
+  keywords?: string[] | null;
+  lattes_url?: string | null;
+  orcid?: string | null;
+  bio?: string | null;
+  status: string;
+  created_at: string;
+  cpf_last4?: string | null;
+}
+
 const STATUS_LABELS: Record<string, string> = {
-  INVITED: "Convidado",
-  PENDING: "Pendente",
-  ACTIVE: "Ativo",
-  SUSPENDED: "Suspenso",
-  DISABLED: "Desativado",
+  convidado: "Convidado",
+  ativo: "Ativo",
+  suspenso: "Suspenso",
 };
 
 const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  INVITED: "outline",
-  PENDING: "secondary",
-  ACTIVE: "default",
-  SUSPENDED: "destructive",
-  DISABLED: "outline",
+  convidado: "outline",
+  ativo: "default",
+  suspenso: "destructive",
 };
 
 function getAreaLabel(a: any): string {
@@ -59,30 +74,116 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [areaFilter, setAreaFilter] = useState<string[]>([]);
   const [showNewModal, setShowNewModal] = useState(false);
-  const [editingReviewer, setEditingReviewer] = useState<any | null>(null);
-  const [deletingReviewer, setDeletingReviewer] = useState<any | null>(null);
+  const [editingReviewer, setEditingReviewer] = useState<ReviewerListItem | null>(null);
+  const [deletingReviewer, setDeletingReviewer] = useState<ReviewerListItem | null>(null);
   const queryClient = useQueryClient();
 
   const { data: reviewers, isLoading } = useQuery({
     queryKey: ["reviewers", orgId, statusFilter],
     queryFn: async () => {
-      let query = supabase
-        .from("reviewers")
-        .select("*")
-        .eq("org_id", orgId)
-        .order("created_at", { ascending: false });
-      if (statusFilter !== "ALL") query = query.eq("status", statusFilter);
-      const { data, error } = await query;
-      if (error) throw error;
-      return data;
+      const items: ReviewerListItem[] = [];
+
+      // 1. Active reviewers: org_members + profiles + reviewer_profiles
+      let omQuery = supabase
+        .from("organization_members")
+        .select("user_id, status")
+        .eq("organization_id", orgId)
+        .eq("role", "reviewer" as any);
+
+      if (statusFilter !== "ALL" && statusFilter !== "convidado") {
+        omQuery = omQuery.eq("status", statusFilter);
+      }
+
+      const { data: members } = await omQuery;
+      const memberIds = (members || []).map((m: any) => m.user_id);
+      const memberStatusMap = new Map((members || []).map((m: any) => [m.user_id, m.status]));
+
+      if (memberIds.length > 0) {
+        const [profilesRes, revProfilesRes] = await Promise.all([
+          supabase.from("profiles").select("user_id, full_name, email, institution_id, institution_custom_name, institution_type, lattes_url, cpf, phone, created_at").in("user_id", memberIds),
+          supabase.from("reviewer_profiles" as any).select("*").eq("org_id", orgId).in("user_id", memberIds) as any,
+        ]);
+        const profiles = profilesRes.data as any[];
+        const revProfiles = (revProfilesRes.data || []) as any[];
+
+        // Fetch institution names for those with institution_id
+        const instIds = (profiles || []).map((p: any) => p.institution_id).filter(Boolean);
+        let institutionMap = new Map<string, string>();
+        if (instIds.length > 0) {
+          const { data: insts } = await supabase.from("institutions").select("id, name").in("id", instIds);
+          institutionMap = new Map((insts || []).map((i: any) => [i.id, i.name]));
+        }
+
+        for (const uid of memberIds) {
+          const profile = (profiles || []).find((p: any) => p.user_id === uid);
+          const rp = (revProfiles || []).find((r: any) => r.user_id === uid);
+          if (!profile) continue;
+
+          const instName = profile.institution_id ? (institutionMap.get(profile.institution_id) || "") : "";
+
+          items.push({
+            _type: "active",
+            _id: `active:${uid}`,
+            user_id: uid,
+            full_name: profile.full_name || "",
+            email: profile.email || "",
+            institution: profile.institution_custom_name || instName || "",
+            institution_custom_name: profile.institution_custom_name,
+            institution_type: profile.institution_type,
+            areas: Array.isArray(rp?.areas) ? rp.areas : [],
+            keywords: rp?.keywords || null,
+            lattes_url: profile.lattes_url,
+            orcid: rp?.orcid || null,
+            bio: rp?.bio || null,
+            status: memberStatusMap.get(uid) || "ativo",
+            created_at: rp?.created_at || profile.created_at || new Date().toISOString(),
+            cpf_last4: profile.cpf?.slice(-4) || null,
+          });
+        }
+      }
+
+      // 2. Pending invites (not used yet)
+      if (statusFilter === "ALL" || statusFilter === "convidado") {
+        const { data: invites } = await supabase
+          .from("reviewer_invites")
+          .select("*")
+          .eq("org_id", orgId)
+          .is("used_at", null)
+          .order("created_at", { ascending: false });
+
+        for (const inv of invites || []) {
+          // Skip if this email is already in the active list
+          if (items.some((i) => i.email === inv.email)) continue;
+
+          items.push({
+            _type: "invite",
+            _id: `invite:${inv.id}`,
+            full_name: (inv as any).full_name || inv.email,
+            email: inv.email,
+            institution: (inv as any).institution || "",
+            institution_custom_name: (inv as any).institution_custom_name,
+            institution_type: (inv as any).institution_type,
+            areas: Array.isArray((inv as any).areas) ? (inv as any).areas : [],
+            keywords: (inv as any).keywords || null,
+            lattes_url: (inv as any).lattes_url || null,
+            orcid: (inv as any).orcid || null,
+            bio: null,
+            status: "convidado",
+            created_at: inv.created_at,
+          });
+        }
+      }
+
+      // Sort by created_at desc
+      items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      return items;
     },
   });
 
   const allAreas = (() => {
     const set = new Map<string, string>();
     reviewers?.forEach((r) => {
-      const areas: any[] = Array.isArray(r.areas) ? r.areas : [];
-      areas.forEach((a: any) => {
+      r.areas.forEach((a: any) => {
         const label = getAreaLabel(a);
         if (label) set.set(label, label);
       });
@@ -97,15 +198,22 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
   };
 
   const toggleStatusMutation = useMutation({
-    mutationFn: async ({ id, newStatus }: { id: string; newStatus: string }) => {
-      const { error } = await supabase.from("reviewers").update({ status: newStatus }).eq("id", id);
-      if (error) throw error;
+    mutationFn: async ({ item, newStatus }: { item: ReviewerListItem; newStatus: string }) => {
+      if (item._type === "active" && item.user_id) {
+        const { error } = await supabase
+          .from("organization_members")
+          .update({ status: newStatus } as any)
+          .eq("user_id", item.user_id)
+          .eq("organization_id", orgId)
+          .eq("role", "reviewer" as any);
+        if (error) throw error;
+      }
       const { data: { user } } = await supabase.auth.getUser();
       await supabase.from("audit_logs").insert({
         user_id: user?.id,
         organization_id: orgId,
         entity: "reviewer",
-        entity_id: id,
+        entity_id: item.user_id || item._id,
         action: "REVIEWER_STATUS_CHANGED",
         metadata_json: { new_status: newStatus },
       });
@@ -118,11 +226,16 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
   });
 
   const resendInviteMutation = useMutation({
-    mutationFn: async (reviewer: { id: string }) => {
-      const { error } = await supabase.functions.invoke("send-reviewer-invite", {
-        body: { reviewerId: reviewer.id, orgId },
-      });
-      if (error) throw error;
+    mutationFn: async (item: ReviewerListItem) => {
+      // For invites, we need the invite record
+      if (item._type === "invite") {
+        const inviteId = item._id.replace("invite:", "");
+        // Re-send by calling edge function with invite data
+        const { error } = await supabase.functions.invoke("send-reviewer-invite", {
+          body: { inviteId, orgId },
+        });
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["reviewers", orgId] });
@@ -140,8 +253,7 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
       if (!match) return false;
     }
     if (areaFilter.length > 0) {
-      const areas: any[] = Array.isArray(r.areas) ? r.areas : [];
-      const reviewerAreas = areas.map((a: any) => getAreaLabel(a));
+      const reviewerAreas = r.areas.map((a: any) => getAreaLabel(a));
       const hasMatch = areaFilter.some((f) => reviewerAreas.includes(f));
       if (!hasMatch) return false;
     }
@@ -164,24 +276,15 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative flex-1 max-w-sm min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por nome, e-mail ou instituição..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
+            <Input placeholder="Buscar por nome, e-mail ou instituição..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
+            <SelectTrigger className="w-[160px]"><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL">Todos</SelectItem>
-              <SelectItem value="INVITED">Convidado</SelectItem>
-              <SelectItem value="PENDING">Pendente</SelectItem>
-              <SelectItem value="ACTIVE">Ativo</SelectItem>
-              <SelectItem value="SUSPENDED">Suspenso</SelectItem>
-              <SelectItem value="DISABLED">Desativado</SelectItem>
+              <SelectItem value="convidado">Convidado</SelectItem>
+              <SelectItem value="ativo">Ativo</SelectItem>
+              <SelectItem value="suspenso">Suspenso</SelectItem>
             </SelectContent>
           </Select>
 
@@ -189,22 +292,15 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="gap-1.5">
-                  <Filter className="w-3.5 h-3.5" />
-                  Área
+                  <Filter className="w-3.5 h-3.5" /> Área
                   {areaFilter.length > 0 && (
-                    <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">
-                      {areaFilter.length}
-                    </Badge>
+                    <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">{areaFilter.length}</Badge>
                   )}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-72 max-h-64 overflow-y-auto">
                 {allAreas.map((area) => (
-                  <DropdownMenuItem
-                    key={area}
-                    onClick={(e) => { e.preventDefault(); toggleAreaFilter(area); }}
-                    className="gap-2 text-xs"
-                  >
+                  <DropdownMenuItem key={area} onClick={(e) => { e.preventDefault(); toggleAreaFilter(area); }} className="gap-2 text-xs">
                     <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${areaFilter.includes(area) ? "bg-primary border-primary" : "border-border"}`}>
                       {areaFilter.includes(area) && <span className="text-primary-foreground text-[9px]">✓</span>}
                     </div>
@@ -222,25 +318,15 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
             {areaFilter.map((a) => (
               <Badge key={a} variant="secondary" className="gap-1 text-xs">
                 {a}
-                <button type="button" onClick={() => toggleAreaFilter(a)}>
-                  <X className="w-3 h-3" />
-                </button>
+                <button type="button" onClick={() => toggleAreaFilter(a)}><X className="w-3 h-3" /></button>
               </Badge>
             ))}
-            <button
-              type="button"
-              onClick={() => setAreaFilter([])}
-              className="text-xs text-muted-foreground hover:text-foreground underline"
-            >
-              Limpar
-            </button>
+            <button type="button" onClick={() => setAreaFilter([])} className="text-xs text-muted-foreground hover:text-foreground underline">Limpar</button>
           </div>
         )}
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-6 h-6 animate-spin text-primary" />
-          </div>
+          <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
         ) : !filtered || filtered.length === 0 ? (
           <div className="text-center py-12 border border-dashed border-border rounded-lg">
             <p className="text-muted-foreground">Nenhum avaliador encontrado.</p>
@@ -261,40 +347,30 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
 
             <div className="divide-y divide-border">
               {filtered.map((r) => {
-                const areas: any[] = Array.isArray(r.areas) ? r.areas : [];
-                const primary = getPrimaryArea(areas);
-                const secondary = getSecondaryArea(areas);
+                const primary = getPrimaryArea(r.areas);
+                const secondary = getSecondaryArea(r.areas);
 
                 return (
-                  <div
-                    key={r.id}
-                    className="grid grid-cols-[1fr_minmax(120px,1fr)_minmax(140px,1.2fr)_90px_90px_40px] gap-3 items-center px-4 py-3 hover:bg-muted/30 transition-colors"
-                  >
+                  <div key={r._id} className="grid grid-cols-[1fr_minmax(120px,1fr)_minmax(140px,1.2fr)_90px_90px_40px] gap-3 items-center px-4 py-3 hover:bg-muted/30 transition-colors">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-foreground truncate leading-tight">{r.full_name}</p>
                       <p className="text-xs text-muted-foreground truncate mt-0.5">{r.email}</p>
                     </div>
-
                     <div className="min-w-0 hidden sm:block">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <p className="text-xs text-muted-foreground truncate">
-                            {formatInstitutionDisplay(r.institution, (r as any).institution_custom_name ? (r as any).institution_sigla : null)}
+                            {formatInstitutionDisplay(r.institution, null)}
                           </p>
                         </TooltipTrigger>
-                        <TooltipContent side="top">
-                          {formatInstitutionDisplay(r.institution, (r as any).institution_custom_name ? (r as any).institution_sigla : null)}
-                        </TooltipContent>
+                        <TooltipContent side="top">{formatInstitutionDisplay(r.institution, null)}</TooltipContent>
                       </Tooltip>
                     </div>
-
                     <div className="min-w-0 hidden md:flex items-center gap-1.5">
                       {primary ? (
                         <>
                           <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="text-xs text-muted-foreground truncate">{primary}</span>
-                            </TooltipTrigger>
+                            <TooltipTrigger asChild><span className="text-xs text-muted-foreground truncate">{primary}</span></TooltipTrigger>
                             <TooltipContent side="top" className="max-w-xs">
                               <p className="text-xs"><strong>Principal:</strong> {primary}</p>
                               {secondary && <p className="text-xs mt-1"><strong>Secundária:</strong> {secondary}</p>}
@@ -302,12 +378,8 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
                           </Tooltip>
                           {secondary && (
                             <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="text-[10px] text-primary/70 whitespace-nowrap cursor-default font-medium">+1</span>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="max-w-xs">
-                                <p className="text-xs">{secondary}</p>
-                              </TooltipContent>
+                              <TooltipTrigger asChild><span className="text-[10px] text-primary/70 whitespace-nowrap cursor-default font-medium">+1</span></TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs"><p className="text-xs">{secondary}</p></TooltipContent>
                             </Tooltip>
                           )}
                         </>
@@ -315,56 +387,47 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
                         <span className="text-xs text-muted-foreground/50 italic">—</span>
                       )}
                     </div>
-
                     <div>
                       <Badge variant={STATUS_VARIANTS[r.status] || "outline"} className="text-[10px]">
                         {STATUS_LABELS[r.status] || r.status}
                       </Badge>
                     </div>
-
                     <div className="hidden lg:block">
                       <span className="text-[11px] text-muted-foreground">
                         {format(new Date(r.created_at), "dd/MM/yy", { locale: ptBR })}
                       </span>
                     </div>
-
                     <div className="flex justify-end">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-7 w-7">
-                            <MoreVertical className="w-3.5 h-3.5" />
-                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7"><MoreVertical className="w-3.5 h-3.5" /></Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem onClick={() => onViewReviewer(r.id)}>
+                          <DropdownMenuItem onClick={() => onViewReviewer(r._id)}>
                             <Eye className="w-3.5 h-3.5 mr-2" /> Ver detalhes
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => setEditingReviewer(r)}>
-                            <Pencil className="w-3.5 h-3.5 mr-2" /> Editar
-                          </DropdownMenuItem>
-                          {(r.status === "INVITED" || r.status === "PENDING") && (
-                            <DropdownMenuItem onClick={() => resendInviteMutation.mutate({ id: r.id })}>
+                          {r._type === "active" && (
+                            <DropdownMenuItem onClick={() => setEditingReviewer(r)}>
+                              <Pencil className="w-3.5 h-3.5 mr-2" /> Editar
+                            </DropdownMenuItem>
+                          )}
+                          {r.status === "convidado" && (
+                            <DropdownMenuItem onClick={() => resendInviteMutation.mutate(r)}>
                               <RefreshCw className="w-3.5 h-3.5 mr-2" /> Reenviar convite
                             </DropdownMenuItem>
                           )}
-                          {r.status === "ACTIVE" && (
-                            <DropdownMenuItem
-                              onClick={() => toggleStatusMutation.mutate({ id: r.id, newStatus: "SUSPENDED" })}
-                              className="text-destructive focus:text-destructive"
-                            >
+                          {r.status === "ativo" && (
+                            <DropdownMenuItem onClick={() => toggleStatusMutation.mutate({ item: r, newStatus: "suspenso" })} className="text-destructive focus:text-destructive">
                               <Ban className="w-3.5 h-3.5 mr-2" /> Suspender
                             </DropdownMenuItem>
                           )}
-                          {r.status === "SUSPENDED" && (
-                            <DropdownMenuItem onClick={() => toggleStatusMutation.mutate({ id: r.id, newStatus: "ACTIVE" })}>
+                          {r.status === "suspenso" && (
+                            <DropdownMenuItem onClick={() => toggleStatusMutation.mutate({ item: r, newStatus: "ativo" })}>
                               <UserCheck className="w-3.5 h-3.5 mr-2" /> Reativar
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => setDeletingReviewer(r)}
-                            className="text-destructive focus:text-destructive"
-                          >
+                          <DropdownMenuItem onClick={() => setDeletingReviewer(r)} className="text-destructive focus:text-destructive">
                             <Trash2 className="w-3.5 h-3.5 mr-2" /> Excluir
                           </DropdownMenuItem>
                         </DropdownMenuContent>

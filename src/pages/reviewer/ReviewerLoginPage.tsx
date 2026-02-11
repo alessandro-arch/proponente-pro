@@ -15,40 +15,33 @@ const ReviewerLoginPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Detect if input looks like CPF (digits/dots/dash)
   const isCpfInput = /^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/.test(identifier.trim());
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = identifier.trim();
     if (!trimmed || !password.trim()) return;
-
     setLoading(true);
 
     let email = trimmed;
 
-    // If it looks like CPF, look up the email from reviewers table
     if (isCpfInput) {
       const cpfClean = trimmed.replace(/\D/g, "");
-      // Hash CPF to find matching reviewer
       const encoder = new TextEncoder();
       const data = encoder.encode(cpfClean);
       const hashBuffer = await crypto.subtle.digest("SHA-256", data);
       const hashArray = Array.from(new Uint8Array(hashBuffer));
       const cpfHash = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
 
-      const { data: reviewer } = await supabase
-        .from("reviewers")
-        .select("email")
-        .eq("cpf_hash", cpfHash)
-        .maybeSingle();
+      // Use RPC function to look up email by CPF hash (bypasses RLS)
+      const { data: emailResult, error: rpcError } = await supabase.rpc("lookup_email_by_cpf_hash", { p_cpf_hash: cpfHash });
 
-      if (!reviewer?.email) {
+      if (rpcError || !emailResult) {
         toast({ title: "CPF não encontrado", description: "Nenhum avaliador com este CPF.", variant: "destructive" });
         setLoading(false);
         return;
       }
-      email = reviewer.email;
+      email = emailResult as string;
     }
 
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -61,78 +54,23 @@ const ReviewerLoginPage = () => {
     }
   };
 
-  const formatCpfLive = (value: string) => {
-    // Only format if the user is typing digits (CPF mode)
-    const clean = value.replace(/\D/g, "");
-    if (clean.length <= 3) return clean.length > 0 && !/^[a-zA-Z@]/.test(value) ? clean : value;
-    // If it contains @ or letters, it's an email—don't format
-    if (/@/.test(value) || /[a-zA-Z]/.test(value)) return value;
-    if (clean.length <= 3) return clean;
-    if (clean.length <= 6) return `${clean.slice(0, 3)}.${clean.slice(3)}`;
-    if (clean.length <= 9) return `${clean.slice(0, 3)}.${clean.slice(3, 6)}.${clean.slice(6)}`;
-    return `${clean.slice(0, 3)}.${clean.slice(3, 6)}.${clean.slice(6, 9)}-${clean.slice(9, 11)}`;
-  };
-
   return (
     <div className="min-h-screen flex items-center justify-center gradient-hero p-4">
       <Card className="max-w-md w-full">
         <CardHeader className="text-center">
-          <div className="w-12 h-12 rounded-lg gradient-primary flex items-center justify-center mx-auto mb-2">
-            <ShieldCheck className="w-6 h-6 text-primary-foreground" />
-          </div>
+          <div className="w-12 h-12 rounded-lg gradient-primary flex items-center justify-center mx-auto mb-2"><ShieldCheck className="w-6 h-6 text-primary-foreground" /></div>
           <CardTitle className="text-xl">Portal do Avaliador</CardTitle>
-          <CardDescription>
-            Acesse com seu e-mail ou CPF cadastrado como avaliador.
-          </CardDescription>
+          <CardDescription>Acesse com seu e-mail ou CPF cadastrado como avaliador.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="identifier">E-mail ou CPF</Label>
-              <Input
-                id="identifier"
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                placeholder="seu@email.com ou 000.000.000-00"
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="password">Senha</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-              />
-            </div>
-            <Button type="submit" className="w-full" size="lg" disabled={loading}>
-              {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Entrar
-            </Button>
+            <div className="space-y-1.5"><Label htmlFor="identifier">E-mail ou CPF</Label><Input id="identifier" value={identifier} onChange={(e) => setIdentifier(e.target.value)} placeholder="seu@email.com ou 000.000.000-00" required /></div>
+            <div className="space-y-1.5"><Label htmlFor="password">Senha</Label><Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required /></div>
+            <Button type="submit" className="w-full" size="lg" disabled={loading}>{loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Entrar</Button>
           </form>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-border" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-2 text-muted-foreground">ou</span>
-            </div>
-          </div>
-
-          <Link to="/reviewer/activate" className="block">
-            <Button variant="outline" className="w-full" size="lg">
-              <KeyRound className="w-4 h-4 mr-2" />
-              Ativar acesso com código de convite
-            </Button>
-          </Link>
-
-          <Link to="/" className="flex items-center gap-1 text-sm text-muted-foreground mt-4 hover:text-foreground transition-colors justify-center">
-            <ArrowLeft className="w-4 h-4" /> Voltar ao início
-          </Link>
+          <div className="relative"><div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div><div className="relative flex justify-center text-xs uppercase"><span className="bg-card px-2 text-muted-foreground">ou</span></div></div>
+          <Link to="/reviewer/activate" className="block"><Button variant="outline" className="w-full" size="lg"><KeyRound className="w-4 h-4 mr-2" />Ativar acesso com código de convite</Button></Link>
+          <Link to="/" className="flex items-center gap-1 text-sm text-muted-foreground mt-4 hover:text-foreground transition-colors justify-center"><ArrowLeft className="w-4 h-4" /> Voltar ao início</Link>
         </CardContent>
       </Card>
     </div>
