@@ -44,6 +44,7 @@ const ReviewerActivatePage = () => {
   const [lattesUrl, setLattesUrl] = useState("");
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [acceptConflict, setAcceptConflict] = useState(false);
+  const [acceptLgpd, setAcceptLgpd] = useState(false);
 
   const formatCode = (value: string): string => {
     return value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 32);
@@ -132,8 +133,8 @@ const ReviewerActivatePage = () => {
   };
 
   const handleSubmitRegistration = async () => {
-    if (!acceptTerms || !acceptConflict) {
-      toast.error("Aceite os termos para continuar.");
+    if (!acceptTerms || !acceptConflict || !acceptLgpd) {
+      toast.error("Aceite todos os termos para continuar.");
       return;
     }
     if (!password || password.length < 6) {
@@ -207,7 +208,7 @@ const ReviewerActivatePage = () => {
 
   if (step === "register") {
     const institutionValid = !!institution.institution_id || (!!institution.institution_custom_name?.trim() && !!institution.institution_type);
-    const formValid = fullName.trim() && cpfClean.length === 11 && validateCpf(cpfClean) && password.length >= 6 && areas.length > 0 && acceptTerms && acceptConflict;
+    const formValid = fullName.trim() && cpfClean.length === 11 && validateCpf(cpfClean) && password.length >= 6 && areas.length > 0 && acceptTerms && acceptConflict && acceptLgpd;
 
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -323,6 +324,17 @@ const ReviewerActivatePage = () => {
                 />
                 <Label htmlFor="conflict" className="text-sm leading-relaxed cursor-pointer">
                   Declaro ausência de conflito de interesse geral para atuar como avaliador, ciente de que conflitos específicos poderão ser declarados por edital.
+                </Label>
+              </div>
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  id="lgpd"
+                  checked={acceptLgpd}
+                  onCheckedChange={(v) => setAcceptLgpd(!!v)}
+                  className="mt-0.5"
+                />
+                <Label htmlFor="lgpd" className="text-sm leading-relaxed cursor-pointer">
+                  Autorizo o tratamento dos meus dados pessoais exclusivamente para a finalidade de avaliação, nos termos da <strong>LGPD (Lei 13.709/2018)</strong>.
                 </Label>
               </div>
             </div>

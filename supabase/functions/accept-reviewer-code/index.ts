@@ -115,6 +115,8 @@ const handler = async (req: Request): Promise<Response> => {
         accepted_at: new Date().toISOString(),
         cpf_hash: cpfHash,
         cpf_last4: cpfLast4,
+        first_terms_accepted_at: new Date().toISOString(),
+        terms_version: "v1",
       })
       .eq("id", reviewer.id);
 
@@ -131,7 +133,7 @@ const handler = async (req: Request): Promise<Response> => {
       entity: "reviewer",
       entity_id: reviewer.id,
       action: "REVIEWER_TERMS_ACCEPTED",
-      metadata_json: { email: reviewer.email, method: "invite_code" },
+      metadata_json: { email: reviewer.email, method: "invite_code", terms_version: "v1", lgpd_accepted: true },
     });
 
     return new Response(
