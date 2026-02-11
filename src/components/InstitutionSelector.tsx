@@ -73,8 +73,8 @@ const InstitutionSelector = ({ value, onChange, disabled, required, label }: Pro
       const { data, error } = await supabase
         .from("institutions")
         .select("id, name, sigla, uf, municipio, organization_type")
-        .ilike("name", `%${debouncedSearch}%`)
         .eq("is_active", true)
+        .or(`name.ilike.%${debouncedSearch}%,sigla.ilike.%${debouncedSearch}%`)
         .limit(20);
       if (error) throw error;
       return data as Institution[];
