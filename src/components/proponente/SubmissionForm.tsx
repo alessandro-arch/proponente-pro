@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { TextFieldWithCounter } from "@/components/ui/text-field-with-counter";
+import BudgetModule, { emptyBudget, type BudgetData } from "@/components/proponente/BudgetModule";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, Save, Send, AlertTriangle, CheckCircle2, Download, FileText } from "lucide-react";
 
@@ -190,6 +191,34 @@ const SubmissionForm = ({ editalId, editalTitle, editalEndDate, onBack }: Submis
       setConfirmOpen(false);
       return;
     }
+    // Validate budget justificativas
+    const budgetErrors: string[] = [];
+    allQuestions.forEach(q => {
+      if (q.type === "budget" && answers[q.id]) {
+        const budget = answers[q.id] as BudgetData;
+        const rubricaNames: Record<string, string> = {
+          diarias: "Diárias", passagens: "Passagens", materialConsumo: "Material de Consumo",
+          servicosTerceiros: "Serviços de Terceiros", materiaisPermanentes: "Materiais Permanentes", bolsas: "Bolsas"
+        };
+        (Object.keys(rubricaNames) as (keyof BudgetData)[]).forEach(key => {
+          const lines = budget[key] || [];
+          lines.forEach((line: any, idx: number) => {
+            if (!line.justificativa?.trim()) {
+              budgetErrors.push(`${rubricaNames[key]}, linha ${idx + 1}: justificativa obrigatória.`);
+            }
+          });
+        });
+      }
+    });
+    if (budgetErrors.length > 0) {
+      toast({
+        title: "Justificativa obrigatória no orçamento",
+        description: budgetErrors.slice(0, 3).join(" ") + (budgetErrors.length > 3 ? ` e mais ${budgetErrors.length - 3} erro(s).` : ""),
+        variant: "destructive"
+      });
+      setConfirmOpen(false);
+      return;
+    }
     if (missing.length > 0) {
       toast({
         title: "Campos obrigatórios",
@@ -353,6 +382,14 @@ const SubmissionForm = ({ editalId, editalTitle, editalEndDate, onBack }: Submis
           </div>
         );
       }
+      case "budget":
+        return (
+          <BudgetModule
+            value={answers[q.id] || emptyBudget}
+            onChange={v => updateAnswer(q.id, v)}
+            disabled={disabled}
+          />
+        );
       default:
         return <Input value={val} onChange={e => updateAnswer(q.id, e.target.value)} disabled={disabled} />;
     }

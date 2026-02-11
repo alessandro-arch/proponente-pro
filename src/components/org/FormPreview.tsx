@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TextFieldWithCounter } from "@/components/ui/text-field-with-counter";
+import BudgetModule, { emptyBudget } from "@/components/proponente/BudgetModule";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, Save } from "lucide-react";
 
@@ -206,6 +207,13 @@ const FormPreview = ({ formId, editalId, onBack }: FormPreviewProps) => {
           </div>
         );
       }
+      case "budget":
+        return (
+          <BudgetModule
+            value={answers[q.id] || emptyBudget}
+            onChange={v => updateAnswer(q.id, v)}
+          />
+        );
       default:
         return <Input value={val} onChange={e => updateAnswer(q.id, e.target.value)} />;
     }
