@@ -9,6 +9,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Loader2, Plus, Search, Eye, MoreVertical, Ban, RefreshCw, UserCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import NewReviewerModal from "./NewReviewerModal";
 
 interface Props {
@@ -155,107 +157,136 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
             </Button>
           </div>
         ) : (
-          <div className="divide-y divide-border border border-border rounded-lg bg-card">
-            {filtered.map((r) => {
-              const areas: any[] = Array.isArray(r.areas) ? r.areas : [];
-              const primaryArea = areas.length > 0 ? formatArea(areas[0]) : null;
-              const extraCount = areas.length > 1 ? areas.length - 1 : 0;
+          <div className="border border-border rounded-lg bg-card overflow-hidden">
+            {/* Header */}
+            <div className="grid grid-cols-[1fr_minmax(120px,1fr)_minmax(140px,1.2fr)_90px_90px_40px] gap-3 px-4 py-2.5 bg-muted/50 border-b border-border text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+              <span>Avaliador</span>
+              <span className="hidden sm:block">Instituição</span>
+              <span className="hidden md:block">Área</span>
+              <span>Status</span>
+              <span className="hidden lg:block">Cadastro</span>
+              <span />
+            </div>
 
-              return (
-                <div
-                  key={r.id}
-                  className="flex items-center gap-4 px-4 py-3 hover:bg-muted/50 transition-colors"
-                >
-                  {/* Name + Email */}
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-foreground truncate">{r.full_name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{r.email}</p>
-                  </div>
+            {/* Rows */}
+            <div className="divide-y divide-border">
+              {filtered.map((r) => {
+                const areas: any[] = Array.isArray(r.areas) ? r.areas : [];
+                const primaryArea = areas.length > 0 ? formatArea(areas[0]) : null;
+                const extraCount = areas.length > 1 ? areas.length - 1 : 0;
 
-                  {/* Institution */}
-                  <div className="hidden md:block w-40 min-w-0">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <p className="text-xs text-muted-foreground truncate">{r.institution}</p>
-                      </TooltipTrigger>
-                      <TooltipContent side="top">{r.institution}</TooltipContent>
-                    </Tooltip>
-                  </div>
+                return (
+                  <div
+                    key={r.id}
+                    className="grid grid-cols-[1fr_minmax(120px,1fr)_minmax(140px,1.2fr)_90px_90px_40px] gap-3 items-center px-4 py-3 hover:bg-muted/30 transition-colors"
+                  >
+                    {/* Name + Email */}
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate leading-tight">{r.full_name}</p>
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">{r.email}</p>
+                    </div>
 
-                  {/* Area */}
-                  <div className="hidden lg:flex items-center gap-1.5 w-52 min-w-0">
-                    {primaryArea ? (
-                      <>
-                        <span className="text-xs text-muted-foreground truncate">{primaryArea}</span>
-                        {extraCount > 0 && (
+                    {/* Institution */}
+                    <div className="min-w-0 hidden sm:block">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <p className="text-xs text-muted-foreground truncate">{r.institution}</p>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">{r.institution}</TooltipContent>
+                      </Tooltip>
+                    </div>
+
+                    {/* Area */}
+                    <div className="min-w-0 hidden md:flex items-center gap-1.5">
+                      {primaryArea ? (
+                        <>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span className="text-[10px] text-muted-foreground/70 whitespace-nowrap cursor-default">
-                                +{extraCount} {extraCount === 1 ? "área" : "áreas"}
-                              </span>
+                              <span className="text-xs text-muted-foreground truncate">{primaryArea}</span>
                             </TooltipTrigger>
-                            <TooltipContent side="top" className="max-w-xs">
-                              <ul className="space-y-0.5 text-xs">
-                                {areas.slice(1).map((a, i) => (
-                                  <li key={i}>{formatArea(a)}</li>
-                                ))}
-                              </ul>
-                            </TooltipContent>
+                            <TooltipContent side="top" className="max-w-xs">{primaryArea}</TooltipContent>
                           </Tooltip>
-                        )}
-                      </>
-                    ) : (
-                      <span className="text-xs text-muted-foreground/50 italic">Sem área</span>
-                    )}
+                          {extraCount > 0 && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-[10px] text-primary/70 whitespace-nowrap cursor-default font-medium">
+                                  +{extraCount}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs">
+                                <ul className="space-y-0.5 text-xs">
+                                  {areas.slice(1).map((a, i) => (
+                                    <li key={i}>{formatArea(a)}</li>
+                                  ))}
+                                </ul>
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-xs text-muted-foreground/50 italic">—</span>
+                      )}
+                    </div>
+
+                    {/* Status */}
+                    <div>
+                      <Badge variant={STATUS_VARIANTS[r.status] || "outline"} className="text-[10px]">
+                        {STATUS_LABELS[r.status] || r.status}
+                      </Badge>
+                    </div>
+
+                    {/* Created at */}
+                    <div className="hidden lg:block">
+                      <span className="text-[11px] text-muted-foreground">
+                        {format(new Date(r.created_at), "dd/MM/yy", { locale: ptBR })}
+                      </span>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex justify-end">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-7 w-7">
+                            <MoreVertical className="w-3.5 h-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-44">
+                          <DropdownMenuItem onClick={() => onViewReviewer(r.id)}>
+                            <Eye className="w-3.5 h-3.5 mr-2" /> Ver detalhes
+                          </DropdownMenuItem>
+                          {(r.status === "INVITED" || r.status === "PENDING") && (
+                            <DropdownMenuItem onClick={() => resendInviteMutation.mutate({ id: r.id })}>
+                              <RefreshCw className="w-3.5 h-3.5 mr-2" /> Reenviar convite
+                            </DropdownMenuItem>
+                          )}
+                          {r.status === "ACTIVE" && (
+                            <DropdownMenuItem
+                              onClick={() => toggleStatusMutation.mutate({ id: r.id, newStatus: "SUSPENDED" })}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Ban className="w-3.5 h-3.5 mr-2" /> Suspender
+                            </DropdownMenuItem>
+                          )}
+                          {r.status === "SUSPENDED" && (
+                            <DropdownMenuItem onClick={() => toggleStatusMutation.mutate({ id: r.id, newStatus: "ACTIVE" })}>
+                              <UserCheck className="w-3.5 h-3.5 mr-2" /> Reativar
+                            </DropdownMenuItem>
+                          )}
+                          {r.status !== "DISABLED" && (
+                            <DropdownMenuItem
+                              onClick={() => toggleStatusMutation.mutate({ id: r.id, newStatus: "DISABLED" })}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 mr-2" /> Desativar
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </div>
-
-                  {/* Status */}
-                  <Badge variant={STATUS_VARIANTS[r.status] || "outline"} className="text-[10px] shrink-0">
-                    {STATUS_LABELS[r.status] || r.status}
-                  </Badge>
-
-                  {/* Actions */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-                        <MoreVertical className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-44">
-                      <DropdownMenuItem onClick={() => onViewReviewer(r.id)}>
-                        <Eye className="w-3.5 h-3.5 mr-2" /> Ver detalhes
-                      </DropdownMenuItem>
-                      {(r.status === "INVITED" || r.status === "PENDING") && (
-                        <DropdownMenuItem onClick={() => resendInviteMutation.mutate({ id: r.id })}>
-                          <RefreshCw className="w-3.5 h-3.5 mr-2" /> Reenviar convite
-                        </DropdownMenuItem>
-                      )}
-                      {r.status === "ACTIVE" && (
-                        <DropdownMenuItem
-                          onClick={() => toggleStatusMutation.mutate({ id: r.id, newStatus: "SUSPENDED" })}
-                          className="text-destructive focus:text-destructive"
-                        >
-                          <Ban className="w-3.5 h-3.5 mr-2" /> Suspender
-                        </DropdownMenuItem>
-                      )}
-                      {r.status === "SUSPENDED" && (
-                        <DropdownMenuItem onClick={() => toggleStatusMutation.mutate({ id: r.id, newStatus: "ACTIVE" })}>
-                          <UserCheck className="w-3.5 h-3.5 mr-2" /> Reativar
-                        </DropdownMenuItem>
-                      )}
-                      {r.status !== "DISABLED" && (
-                        <DropdownMenuItem
-                          onClick={() => toggleStatusMutation.mutate({ id: r.id, newStatus: "DISABLED" })}
-                          className="text-destructive focus:text-destructive"
-                        >
-                          <Trash2 className="w-3.5 h-3.5 mr-2" /> Desativar
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         )}
 
