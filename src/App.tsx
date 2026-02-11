@@ -17,6 +17,8 @@ import FinanceiroPanel from "./pages/financeiro/FinanceiroPanel";
 import Profile from "./pages/Profile";
 import ReviewerInvitePage from "./pages/invite/ReviewerInvitePage";
 import ReviewerActivatePage from "./pages/reviewer/ReviewerActivatePage";
+import ReviewerTermsPage from "./pages/reviewer/ReviewerTermsPage";
+import ReviewerTermsGate from "./components/ReviewerTermsGate";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -37,7 +39,8 @@ const App = () => (
             <Route path="/admin/*" element={<ProtectedRoute allowedRoles={["icca_admin"]}><AdminPanel /></ProtectedRoute>} />
             <Route path="/org/*" element={<ProtectedRoute allowedRoles={["org_admin", "edital_manager"]}><OrgPanel /></ProtectedRoute>} />
             <Route path="/proponente/*" element={<ProtectedRoute allowedRoles={["proponente"]}><ProponentePanel /></ProtectedRoute>} />
-            <Route path="/reviewer/*" element={<ProtectedRoute allowedRoles={["reviewer"]}><ReviewerPanel /></ProtectedRoute>} />
+            <Route path="/reviewer/terms" element={<ProtectedRoute allowedRoles={["reviewer"]}><ReviewerTermsPage /></ProtectedRoute>} />
+            <Route path="/reviewer/*" element={<ProtectedRoute allowedRoles={["reviewer"]}><ReviewerTermsGate><ReviewerPanel /></ReviewerTermsGate></ProtectedRoute>} />
             <Route path="/financeiro/*" element={<ProtectedRoute allowedRoles={["proponente"]}><FinanceiroPanel /></ProtectedRoute>} />
             <Route path="/invite/reviewer" element={<ReviewerInvitePage />} />
             <Route path="/reviewer/activate" element={<ReviewerActivatePage />} />
