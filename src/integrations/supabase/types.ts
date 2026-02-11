@@ -1617,6 +1617,65 @@ export type Database = {
           },
         ]
       }
+      proposal_reviewer_conflicts: {
+        Row: {
+          created_at: string
+          edital_id: string
+          id: string
+          org_id: string
+          proposal_id: string
+          reason: string | null
+          reviewer_user_id: string
+        }
+        Insert: {
+          created_at?: string
+          edital_id: string
+          id?: string
+          org_id: string
+          proposal_id: string
+          reason?: string | null
+          reviewer_user_id: string
+        }
+        Update: {
+          created_at?: string
+          edital_id?: string
+          id?: string
+          org_id?: string
+          proposal_id?: string
+          reason?: string | null
+          reviewer_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "proposal_reviewer_conflicts_edital_id_fkey"
+            columns: ["edital_id"]
+            isOneToOne: false
+            referencedRelation: "editais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "proposal_reviewer_conflicts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "proposal_reviewer_conflicts_proposal_id_fkey"
+            columns: ["proposal_id"]
+            isOneToOne: false
+            referencedRelation: "proposals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "proposal_reviewer_conflicts_proposal_id_fkey"
+            columns: ["proposal_id"]
+            isOneToOne: false
+            referencedRelation: "submissions_blind"
+            referencedColumns: ["submission_id"]
+          },
+        ]
+      }
       proposals: {
         Row: {
           blind_code: string | null
@@ -1747,6 +1806,8 @@ export type Database = {
         Row: {
           assigned_at: string
           assigned_by: string
+          conflict_declared: boolean
+          conflict_reason: string | null
           id: string
           proposal_id: string
           reviewer_user_id: string
@@ -1756,6 +1817,8 @@ export type Database = {
         Insert: {
           assigned_at?: string
           assigned_by: string
+          conflict_declared?: boolean
+          conflict_reason?: string | null
           id?: string
           proposal_id: string
           reviewer_user_id: string
@@ -1765,6 +1828,8 @@ export type Database = {
         Update: {
           assigned_at?: string
           assigned_by?: string
+          conflict_declared?: boolean
+          conflict_reason?: string | null
           id?: string
           proposal_id?: string
           reviewer_user_id?: string
