@@ -57,7 +57,11 @@ const ProposalContentCard = ({
         <CardTitle className="flex items-center gap-2 text-lg">
           <BookOpen className="w-5 h-5 text-primary" /> Conteúdo da Proposta
         </CardTitle>
-        <CardDescription>Dados anonimizados para avaliação cega — sem identificação do proponente</CardDescription>
+        <CardDescription>
+          {anonymizedData?.blind_review !== false
+            ? "Dados anonimizados para avaliação cega — sem identificação do proponente"
+            : "Conteúdo da proposta para avaliação"}
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {knowledgeArea && (
@@ -382,15 +386,17 @@ const ReviewForm = ({ assignment, onBack }: { assignment: Assignment; onBack: ()
         </div>
       </header>
 
-      {/* Confidentiality */}
-      <div className="bg-accent/30 border-b border-accent/50">
-        <div className="container mx-auto px-4 py-3 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-accent-foreground flex-shrink-0" />
-          <p className="text-xs text-accent-foreground">
-            <strong>Avaliação cega:</strong> Qualquer tentativa de identificação do proponente viola as regras do edital.
-          </p>
+      {/* Confidentiality - only for blind review */}
+      {anonymizedData?.blind_review !== false && (
+        <div className="bg-accent/30 border-b border-accent/50">
+          <div className="container mx-auto px-4 py-3 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-accent-foreground flex-shrink-0" />
+            <p className="text-xs text-accent-foreground">
+              <strong>Avaliação cega:</strong> Qualquer tentativa de identificação do proponente viola as regras do edital.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       <main className="container mx-auto px-4 py-8 max-w-3xl">
         {/* Proposal content (anonymized) */}

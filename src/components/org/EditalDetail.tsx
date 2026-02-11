@@ -10,7 +10,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, Send, Lock, Plus, FileText, Settings, Inbox, ClipboardCheck, AlertTriangle, Trash2, Copy } from "lucide-react";
+import { Loader2, ArrowLeft, Send, Lock, Plus, FileText, Settings, Inbox, ClipboardCheck, AlertTriangle, Trash2, Copy, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import FormKnowledgeAreas from "@/components/org/FormKnowledgeAreas";
 import FormSectionBuilder from "@/components/org/FormSectionBuilder";
 import FormPreview from "@/components/org/FormPreview";
@@ -42,6 +44,188 @@ interface Edital {
   min_reviewers_per_proposal: number | null;
   blind_review_enabled: boolean;
 }
+
+// ─── Blind Review Settings Component ───
+const BlindReviewSettings = ({ editalId, blindReviewEnabled }: { editalId: string; blindReviewEnabled: boolean }) => {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [enabled, setEnabled] = useState(blindReviewEnabled);
+  const [prefix, setPrefix] = useState("");
+  const [strategy, setStrategy] = useState("sequential");
+  const [loadingConfig, setLoadingConfig] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [hasSubmittedReviews, setHasSubmittedReviews] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoadingConfig(true);
+      const [editalRes, reviewsRes] = await Promise.all([
+        supabase.from("editais").select("blind_review_enabled, blind_code_prefix, blind_code_strategy").eq("id", editalId).single(),
+        supabase.from("review_assignments").select("id", { count: "exact", head: true }).eq("status", "submitted").in("proposal_id",
+          supabase.from("proposals").select("id").eq("edital_id", editalId) as any
+        ),
+      ]);
+      if (editalRes.data) {
+        setEnabled(editalRes.data.blind_review_enabled);
+        setPrefix((editalRes.data as any).blind_code_prefix || "");
+        setStrategy((editalRes.data as any).blind_code_strategy || "sequential");
+      }
+      // Check for submitted reviews
+      const { count } = await supabase
+        .from("reviews")
+        .select("id", { count: "exact", head: true })
+        .in("proposal_id", (await supabase.from("proposals").select("id").eq("edital_id", editalId)).data?.map((p: any) => p.id) || []);
+      setHasSubmittedReviews((count || 0) > 0);
+      setLoadingConfig(false);
+    };
+    load();
+  }, [editalId]);
+
+  const handleToggle = async (newValue: boolean) => {
+    if (hasSubmittedReviews) {
+      toast({ title: "Não é possível alterar", description: "Existem avaliações já submetidas para este edital.", variant: "destructive" });
+      return;
+    }
+    // If changing, show confirm
+    setConfirmOpen(true);
+  };
+
+  const confirmToggle = async () => {
+    setSaving(true);
+    const newValue = !enabled;
+    const { error } = await supabase.from("editais").update({
+      blind_review_enabled: newValue,
+    } as any).eq("id", editalId);
+
+    if (error) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    } else {
+      setEnabled(newValue);
+      // Audit log
+      if (user) {
+        await supabase.from("audit_logs").insert({
+          user_id: user.id,
+          action: "blind_review_toggled",
+          entity: "edital",
+          entity_id: editalId,
+          metadata_json: { blind_review_enabled: newValue, previous: !newValue },
+        });
+      }
+      toast({ title: `Avaliação cega ${newValue ? "ativada" : "desativada"}` });
+    }
+    setSaving(false);
+    setConfirmOpen(false);
+  };
+
+  const handleSaveConfig = async () => {
+    setSaving(true);
+    const { error } = await supabase.from("editais").update({
+      blind_code_prefix: prefix || null,
+      blind_code_strategy: strategy,
+    } as any).eq("id", editalId);
+    if (error) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Configuração salva!" });
+    }
+    setSaving(false);
+  };
+
+  if (loadingConfig) return <Card><CardContent className="py-6 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-primary" /></CardContent></Card>;
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-primary" />
+            Avaliação Cega (Blind Review)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-muted/30">
+            <div className="flex-1">
+              <Label className="text-sm font-medium">Ativar Avaliação Cega</Label>
+              <p className="text-xs text-muted-foreground mt-1">
+                Ao ativar, os avaliadores não terão acesso a nome, CPF, instituição ou qualquer dado pessoal do proponente.
+                O sistema exibirá apenas um código cego e o conteúdo técnico.
+              </p>
+            </div>
+            <Switch
+              checked={enabled}
+              onCheckedChange={handleToggle}
+              disabled={hasSubmittedReviews || saving}
+            />
+          </div>
+
+          {hasSubmittedReviews && (
+            <div className="flex items-center gap-2 p-3 rounded-lg border border-destructive/30 bg-destructive/5">
+              <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0" />
+              <p className="text-xs text-destructive">
+                Não é possível alterar o modo de avaliação cega porque já existem avaliações submetidas para este edital.
+              </p>
+            </div>
+          )}
+
+          {enabled && (
+            <div className="space-y-4 pt-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm">Prefixo do Código Cego</Label>
+                  <Input
+                    value={prefix}
+                    onChange={(e) => setPrefix(e.target.value)}
+                    placeholder={`ED${new Date().getFullYear()}`}
+                    className="mt-1"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Ex: ED2026, FAPES-2026</p>
+                </div>
+                <div>
+                  <Label className="text-sm">Estratégia de Código</Label>
+                  <Select value={strategy} onValueChange={setStrategy}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sequential">Sequencial (ED2026-001)</SelectItem>
+                      <SelectItem value="uuid_short">Aleatório (ED2026-A7K3QZ)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <Button size="sm" onClick={handleSaveConfig} disabled={saving}>
+                {saving && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
+                Salvar Configurações
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Confirm dialog */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{enabled ? "Desativar" : "Ativar"} Avaliação Cega</DialogTitle>
+            <DialogDescription>
+              {enabled
+                ? "Ao desativar, os avaliadores poderão ver os dados do proponente. Deseja continuar?"
+                : "Ao ativar, os avaliadores não terão acesso aos dados pessoais do proponente. Deseja continuar?"}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancelar</Button>
+            <Button onClick={confirmToggle} disabled={saving}>
+              {saving && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+};
 
 const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; orgId: string; onBack: () => void; onDuplicate?: (sourceEdital: Edital) => void }) => {
   const { user, globalRole, membership } = useAuth();
@@ -560,10 +744,13 @@ const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; 
         {showSettingsTab && (
           <TabsContent value="settings">
             <div className="space-y-6">
+              {/* Blind Review Config */}
+              <BlindReviewSettings editalId={edital.id} blindReviewEnabled={edital.blind_review_enabled} />
+
               {/* Min reviewers config */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Avaliação</CardTitle>
+                  <CardTitle className="text-lg">Número de Avaliadores</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="max-w-xs">
