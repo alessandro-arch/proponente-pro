@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, Search, X, Building2 } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 const INSTITUTION_TYPES = [
   "Universidade",
@@ -22,9 +21,10 @@ const INSTITUTION_TYPES = [
 
 interface InstitutionValue {
   institution_id: string | null;
-  institution_name: string; // display name (from DB or custom)
+  institution_name: string;
   institution_custom_name: string | null;
   institution_type: string | null;
+  institution_sigla?: string | null;
 }
 
 interface Props {
@@ -44,11 +44,19 @@ interface Institution {
   organization_type: string | null;
 }
 
+/** Format institution display as "Nome (SIGLA)" or just "Nome" if no sigla */
+export function formatInstitutionDisplay(name: string, sigla?: string | null): string {
+  if (!name) return "";
+  if (sigla && sigla.trim()) return `${name} (${sigla.trim().toUpperCase()})`;
+  return name;
+}
+
 const InstitutionSelector = ({ value, onChange, disabled, required, label }: Props) => {
   const [search, setSearch] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [isCustom, setIsCustom] = useState(!!value.institution_custom_name && !value.institution_id);
+  const [customSigla, setCustomSigla] = useState(value.institution_sigla || "");
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -88,6 +96,7 @@ const InstitutionSelector = ({ value, onChange, disabled, required, label }: Pro
       institution_name: inst.name,
       institution_custom_name: null,
       institution_type: inst.organization_type,
+      institution_sigla: inst.sigla,
     });
     setSearch("");
     setIsOpen(false);
@@ -99,9 +108,11 @@ const InstitutionSelector = ({ value, onChange, disabled, required, label }: Pro
       institution_name: "",
       institution_custom_name: null,
       institution_type: null,
+      institution_sigla: null,
     });
     setSearch("");
     setIsCustom(false);
+    setCustomSigla("");
   }, [onChange]);
 
   const toggleCustom = useCallback((checked: boolean) => {
@@ -112,15 +123,25 @@ const InstitutionSelector = ({ value, onChange, disabled, required, label }: Pro
         institution_name: value.institution_custom_name || "",
         institution_custom_name: value.institution_custom_name || "",
         institution_type: value.institution_type || null,
+        institution_sigla: customSigla || null,
       });
       setSearch("");
       setIsOpen(false);
     } else {
       handleClear();
     }
-  }, [onChange, value, handleClear]);
+  }, [onChange, value, handleClear, customSigla]);
 
   const hasSelection = !!value.institution_id;
+
+  // Derive display name with sigla
+  const displayName = hasSelection
+    ? formatInstitutionDisplay(value.institution_name, value.institution_sigla)
+    : value.institution_name;
+
+  // Sigla validation for custom mode
+  const siglaClean = customSigla.trim();
+  const siglaValid = siglaClean.length >= 2 && siglaClean.length <= 10;
 
   return (
     <div ref={containerRef} className="space-y-2">
@@ -136,7 +157,7 @@ const InstitutionSelector = ({ value, onChange, disabled, required, label }: Pro
           {hasSelection ? (
             <div className="flex items-center gap-2 p-2.5 rounded-md border border-input bg-background">
               <Building2 className="w-4 h-4 text-primary shrink-0" />
-              <span className="text-sm truncate flex-1">{value.institution_name}</span>
+              <span className="text-sm truncate flex-1">{displayName}</span>
               {value.institution_type && (
                 <span className="text-xs text-muted-foreground shrink-0">{value.institution_type}</span>
               )}
@@ -153,7 +174,7 @@ const InstitutionSelector = ({ value, onChange, disabled, required, label }: Pro
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onFocus={() => setIsOpen(true)}
-                placeholder="Buscar instituição pelo nome..."
+                placeholder="Buscar instituição pelo nome ou sigla..."
                 className="pl-9"
                 disabled={disabled}
               />
@@ -211,7 +232,7 @@ const InstitutionSelector = ({ value, onChange, disabled, required, label }: Pro
           disabled={disabled}
         />
         <Label htmlFor="institution-custom" className="cursor-pointer text-sm text-muted-foreground">
-          Não encontrei / Não é universidade
+          Não encontrei / Adicionar nova instituição
         </Label>
       </div>
 
@@ -220,7 +241,7 @@ const InstitutionSelector = ({ value, onChange, disabled, required, label }: Pro
         <div className="space-y-3 pl-6 border-l-2 border-border">
           <div>
             <Label>
-              Nome da instituição <span className="text-destructive">*</span>
+              Nome completo da instituição <span className="text-destructive">*</span>
             </Label>
             <Input
               value={value.institution_custom_name || ""}
@@ -236,6 +257,30 @@ const InstitutionSelector = ({ value, onChange, disabled, required, label }: Pro
               disabled={disabled}
               className="mt-1"
             />
+          </div>
+          <div>
+            <Label>
+              Sigla <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              value={customSigla}
+              onChange={(e) => {
+                const val = e.target.value.toUpperCase().replace(/[^A-ZÀ-Ú0-9]/g, "").slice(0, 10);
+                setCustomSigla(val);
+                onChange({
+                  ...value,
+                  institution_id: null,
+                  institution_sigla: val || null,
+                });
+              }}
+              placeholder="Ex: UFMG, USP, SENAI"
+              disabled={disabled}
+              className="mt-1 uppercase"
+              maxLength={10}
+            />
+            {customSigla.length > 0 && !siglaValid && (
+              <p className="text-xs text-destructive mt-1">A sigla deve ter entre 2 e 10 caracteres.</p>
+            )}
           </div>
           <div>
             <Label>
