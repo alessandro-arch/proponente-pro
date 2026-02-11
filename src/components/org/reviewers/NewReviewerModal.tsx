@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -8,9 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, X } from "lucide-react";
+import { Loader2, X, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 import CnpqAreaSelector from "@/components/CnpqAreaSelector";
 import InstitutionSelector from "@/components/InstitutionSelector";
@@ -19,6 +18,16 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   orgId: string;
+}
+
+function generateInviteCode(): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const segments = [4, 4, 4];
+  return segments.map(len => {
+    let s = "";
+    for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * chars.length)];
+    return s;
+  }).join("-");
 }
 
 const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
@@ -31,7 +40,6 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
     lattes_url: "",
     orcid: "",
     bio: "",
-    sendInvite: true,
   });
   const [institution, setInstitution] = useState({
     institution_id: null as string | null,
@@ -43,13 +51,25 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
   const [currentArea, setCurrentArea] = useState<string | null>(null);
   const [keywords, setKeywords] = useState<string[]>([]);
   const [keywordInput, setKeywordInput] = useState("");
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [createdResult, setCreatedResult] = useState<{ code: string; link: string } | null>(null);
+
+  // Auto-generate invite code when modal opens
+  useEffect(() => {
+    if (open) {
+      setForm(prev => ({ ...prev, inviteCode: generateInviteCode() }));
+      setCreatedResult(null);
+    }
+  }, [open]);
 
   const resetForm = () => {
-    setForm({ full_name: "", email: "", cpf: "", inviteCode: "", lattes_url: "", orcid: "", bio: "", sendInvite: true });
+    setForm({ full_name: "", email: "", cpf: "", inviteCode: generateInviteCode(), lattes_url: "", orcid: "", bio: "" });
     setInstitution({ institution_id: null, institution_name: "", institution_custom_name: null, institution_type: null });
     setKeywords([]);
     setKeywordInput("");
     setCurrentArea(null);
+    setCreatedResult(null);
   };
 
   const addArea = (value: string) => {
@@ -110,6 +130,7 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
       const cpfClean = form.cpf.replace(/\D/g, "");
 
       if (!validateCpf(cpfClean)) throw new Error("CPF inválido.");
+      if (form.inviteCode.length < 6) throw new Error("Código do convite deve ter pelo menos 6 caracteres.");
 
       const cpfHashed = await hashCpf(cpfClean);
       const cpfLast4 = cpfClean.slice(-4);
@@ -131,8 +152,8 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
           lattes_url: form.lattes_url || null,
           orcid: form.orcid || null,
           bio: form.bio || null,
-          status: form.sendInvite ? "INVITED" : "PENDING",
-          invited_at: form.sendInvite ? new Date().toISOString() : null,
+          status: "INVITED",
+          invited_at: new Date().toISOString(),
         })
         .select()
         .single();
@@ -150,35 +171,79 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
         entity: "reviewer",
         entity_id: reviewer.id,
         action: "REVIEWER_CREATED",
-        metadata_json: { email, full_name: form.full_name.trim() },
+        metadata_json: { email, full_name: form.full_name.trim(), invite_code: form.inviteCode },
       });
 
-      // Send invite if checked
-      if (form.sendInvite) {
-        try {
-          await supabase.functions.invoke("send-reviewer-invite", {
-            body: { reviewerId: reviewer.id, orgId, inviteCode: form.inviteCode.trim() || undefined },
-          });
-        } catch {
-          console.error("Failed to send invite email");
-        }
+      // Send invite with generated code
+      try {
+        await supabase.functions.invoke("send-reviewer-invite", {
+          body: { reviewerId: reviewer.id, orgId, inviteCode: form.inviteCode.trim() },
+        });
+      } catch {
+        console.error("Failed to send invite email");
       }
 
       return reviewer;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["reviewers", orgId] });
-      toast.success("Avaliador cadastrado com sucesso!");
-      resetForm();
-      onOpenChange(false);
+      const activateLink = `${window.location.origin}/reviewer/activate`;
+      setCreatedResult({ code: form.inviteCode, link: activateLink });
+      toast.success("Avaliador cadastrado e convite gerado!");
     },
     onError: (err: any) => toast.error(err.message || "Erro ao cadastrar avaliador."),
   });
 
+  const copyToClipboard = async (text: string, type: "code" | "link") => {
+    await navigator.clipboard.writeText(text);
+    if (type === "code") { setCopiedCode(true); setTimeout(() => setCopiedCode(false), 2000); }
+    else { setCopiedLink(true); setTimeout(() => setCopiedLink(false), 2000); }
+  };
+
   const institutionValid = !!institution.institution_id || (!!institution.institution_custom_name?.trim() && !!institution.institution_type);
   const cpfClean = form.cpf.replace(/\D/g, "");
-  const inviteCodeValid = !form.sendInvite || (form.inviteCode.length >= 6 && form.inviteCode.length <= 32);
+  const inviteCodeValid = form.inviteCode.length >= 6 && form.inviteCode.length <= 32;
   const isValid = form.full_name.trim() && form.email.trim() && cpfClean.length === 11 && institutionValid && areas.length > 0 && inviteCodeValid;
+
+  // Success screen with code and link
+  if (createdResult) {
+    return (
+      <Dialog open={open} onOpenChange={(v) => { if (!v) { resetForm(); } onOpenChange(v); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Convite Gerado com Sucesso</DialogTitle>
+            <DialogDescription>Compartilhe o código ou link de ativação com o avaliador.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Código do Convite</Label>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 bg-muted rounded-lg p-3 font-mono text-lg tracking-wider text-center font-bold text-foreground">
+                  {createdResult.code}
+                </code>
+                <Button variant="outline" size="icon" onClick={() => copyToClipboard(createdResult.code, "code")}>
+                  {copiedCode ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4" />}
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Link de Ativação</Label>
+              <div className="flex items-center gap-2">
+                <Input readOnly value={createdResult.link} className="text-xs" />
+                <Button variant="outline" size="icon" onClick={() => copyToClipboard(createdResult.link, "link")}>
+                  {copiedLink ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4" />}
+                </Button>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">O convite expira em 7 dias. O avaliador deve usar o código na página de ativação para criar sua conta.</p>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => { resetForm(); onOpenChange(false); }}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -283,18 +348,9 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
             <Textarea value={form.bio} onChange={(e) => setForm({ ...form, bio: e.target.value })} rows={3} />
           </div>
 
-          <div className="flex items-center gap-2 pt-2">
-            <Checkbox
-              id="sendInvite"
-              checked={form.sendInvite}
-              onCheckedChange={(v) => setForm({ ...form, sendInvite: !!v })}
-            />
-            <Label htmlFor="sendInvite" className="cursor-pointer">Enviar convite por e-mail agora</Label>
-          </div>
-
-          {form.sendInvite && (
-            <div className="space-y-1.5 pl-6">
-              <Label>Código do Convite <span className="text-destructive">*</span></Label>
+          <div className="space-y-1.5">
+            <Label>Código do Convite <span className="text-destructive">*</span></Label>
+            <div className="flex gap-2">
               <Input
                 value={form.inviteCode}
                 onChange={(e) => setForm({ ...form, inviteCode: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 32) })}
@@ -302,19 +358,22 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
                 className="font-mono tracking-wider"
                 maxLength={32}
               />
-              <p className="text-xs text-muted-foreground">Apenas A-Z, 0-9 e hífen. 6 a 32 caracteres. Único por organização.</p>
-              {form.inviteCode.length > 0 && form.inviteCode.length < 6 && (
-                <p className="text-xs text-destructive">Mínimo 6 caracteres</p>
-              )}
+              <Button type="button" variant="outline" size="sm" onClick={() => setForm({ ...form, inviteCode: generateInviteCode() })}>
+                Gerar novo
+              </Button>
             </div>
-          )}
+            <p className="text-xs text-muted-foreground">Gerado automaticamente. Editável pelo gestor. A-Z, 0-9, hífen. 6 a 32 caracteres.</p>
+            {form.inviteCode.length > 0 && form.inviteCode.length < 6 && (
+              <p className="text-xs text-destructive">Mínimo 6 caracteres</p>
+            )}
+          </div>
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
           <Button onClick={() => createMutation.mutate()} disabled={!isValid || createMutation.isPending}>
             {createMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            Salvar
+            Salvar e Gerar Convite
           </Button>
         </DialogFooter>
       </DialogContent>

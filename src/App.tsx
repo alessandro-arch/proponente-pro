@@ -17,6 +17,7 @@ import FinanceiroPanel from "./pages/financeiro/FinanceiroPanel";
 import Profile from "./pages/Profile";
 import ReviewerInvitePage from "./pages/invite/ReviewerInvitePage";
 import ReviewerActivatePage from "./pages/reviewer/ReviewerActivatePage";
+import ReviewerLoginPage from "./pages/reviewer/ReviewerLoginPage";
 import ReviewerTermsPage from "./pages/reviewer/ReviewerTermsPage";
 import ReviewerTermsGate from "./components/ReviewerTermsGate";
 import NotFound from "./pages/NotFound";
@@ -42,6 +43,7 @@ const App = () => (
             <Route path="/reviewer/terms" element={<ProtectedRoute allowedRoles={["reviewer"]}><ReviewerTermsPage /></ProtectedRoute>} />
             <Route path="/reviewer/*" element={<ProtectedRoute allowedRoles={["reviewer"]}><ReviewerTermsGate><ReviewerPanel /></ReviewerTermsGate></ProtectedRoute>} />
             <Route path="/financeiro/*" element={<ProtectedRoute allowedRoles={["proponente"]}><FinanceiroPanel /></ProtectedRoute>} />
+            <Route path="/avaliador" element={<ReviewerLoginPage />} />
             <Route path="/invite/reviewer" element={<ReviewerInvitePage />} />
             <Route path="/reviewer/activate" element={<ReviewerActivatePage />} />
             <Route path="*" element={<NotFound />} />
