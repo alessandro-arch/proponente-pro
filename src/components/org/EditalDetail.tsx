@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, Send, Lock, Plus, FileText, Settings, Inbox, ClipboardCheck, AlertTriangle, Trash2, Copy, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { Loader2, ArrowLeft, Send, Lock, Plus, FileText, Settings, Inbox, ClipboardCheck, AlertTriangle, Trash2, Copy, Eye, EyeOff, ShieldCheck, Globe } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import FormKnowledgeAreas from "@/components/org/FormKnowledgeAreas";
@@ -43,6 +43,7 @@ interface Edital {
   review_deadline: string | null;
   min_reviewers_per_proposal: number | null;
   blind_review_enabled: boolean;
+  is_public: boolean;
 }
 
 // ─── Blind Review Settings Component ───
@@ -744,6 +745,40 @@ const EditalDetail = ({ edital, orgId, onBack, onDuplicate }: { edital: Edital; 
         {showSettingsTab && (
           <TabsContent value="settings">
             <div className="space-y-6">
+              {/* Visibility Config */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Globe className="w-5 h-5 text-primary" />
+                    Visibilidade do Edital
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-muted/30">
+                    <div className="flex-1">
+                      <Label className="text-sm font-medium">Edital Público</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Editais públicos aparecem na página inicial para qualquer visitante. Editais privados ficam restritos à organização.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={(edital as any).is_public ?? false}
+                      disabled={!["draft", "published"].includes(edital.status)}
+                      onCheckedChange={async (val) => {
+                        const { error } = await supabase.from("editais").update({ is_public: val } as any).eq("id", edital.id);
+                        if (!error) {
+                          (edital as any).is_public = val;
+                          toast({ title: val ? "Edital agora é público" : "Edital agora é privado" });
+                        }
+                      }}
+                    />
+                  </div>
+                  {!["draft", "published"].includes(edital.status) && (
+                    <p className="text-xs text-muted-foreground">A visibilidade só pode ser alterada em editais com status Rascunho ou Publicado.</p>
+                  )}
+                </CardContent>
+              </Card>
+
               {/* Blind Review Config */}
               <BlindReviewSettings editalId={edital.id} blindReviewEnabled={edital.blind_review_enabled} />
 

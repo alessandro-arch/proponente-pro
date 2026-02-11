@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, ScrollText, Search, Copy, AlertTriangle } from "lucide-react";
+import { Loader2, Plus, ScrollText, Search, Copy, AlertTriangle, Globe } from "lucide-react";
 import EditalDetail from "@/components/org/EditalDetail";
 import { getComputedStatus, getStatusVariant } from "@/lib/edital-status";
 
@@ -26,6 +26,7 @@ interface Edital {
   review_deadline: string | null;
   min_reviewers_per_proposal: number | null;
   blind_review_enabled: boolean;
+  is_public: boolean;
 }
 
 const EditaisList = ({ orgId }: { orgId: string }) => {
@@ -42,6 +43,7 @@ const EditaisList = ({ orgId }: { orgId: string }) => {
   const [newStartDate, setNewStartDate] = useState("");
   const [newEndDate, setNewEndDate] = useState("");
   const [selectedEdital, setSelectedEdital] = useState<Edital | null>(null);
+  const [visibilityFilter, setVisibilityFilter] = useState("all");
 
   // Duplicate state
   const [dupDialogOpen, setDupDialogOpen] = useState(false);
@@ -58,12 +60,14 @@ const EditaisList = ({ orgId }: { orgId: string }) => {
     let query = supabase.from("editais").select("*").eq("organization_id", orgId).is("deleted_at", null).order("created_at", { ascending: false });
     if (filter !== "all") query = query.eq("status", filter as any);
     if (search.trim()) query = query.ilike("title", `%${search.trim()}%`);
+    if (visibilityFilter === "public") query = query.eq("is_public", true);
+    if (visibilityFilter === "private") query = query.eq("is_public", false);
     const { data } = await query;
     setEditais((data || []) as Edital[]);
     setLoading(false);
   };
 
-  useEffect(() => { fetchEditais(); }, [orgId, filter, search]);
+  useEffect(() => { fetchEditais(); }, [orgId, filter, search, visibilityFilter]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -444,7 +448,7 @@ const EditaisList = ({ orgId }: { orgId: string }) => {
         </DialogContent>
       </Dialog>
 
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
         <div className="relative flex-1 max-w-sm">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar edital..." className="pl-9" />
@@ -462,6 +466,14 @@ const EditaisList = ({ orgId }: { orgId: string }) => {
             <SelectItem value="homologado">Homologado</SelectItem>
             <SelectItem value="outorgado">Outorgado</SelectItem>
             <SelectItem value="cancelado">Cancelado</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={visibilityFilter} onValueChange={setVisibilityFilter}>
+          <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas visibilidades</SelectItem>
+            <SelectItem value="public">Público</SelectItem>
+            <SelectItem value="private">Privado</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -484,6 +496,7 @@ const EditaisList = ({ orgId }: { orgId: string }) => {
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-foreground">{e.title}</p>
                     {statusBadge(e)}
+                    {(e as any).is_public && <Badge variant="outline" className="text-xs">Público</Badge>}
                   </div>
                   {e.description && <p className="text-sm text-muted-foreground line-clamp-1">{e.description}</p>}
                   <p className="text-xs text-muted-foreground">
