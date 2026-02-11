@@ -56,7 +56,7 @@ const EditaisList = ({ orgId }: { orgId: string }) => {
   const fetchEditais = async () => {
     setLoading(true);
     let query = supabase.from("editais").select("*").eq("organization_id", orgId).is("deleted_at", null).order("created_at", { ascending: false });
-    if (filter !== "all") query = query.eq("status", filter as "draft" | "published" | "closed");
+    if (filter !== "all") query = query.eq("status", filter as any);
     if (search.trim()) query = query.ilike("title", `%${search.trim()}%`);
     const { data } = await query;
     setEditais((data || []) as Edital[]);
@@ -450,12 +450,18 @@ const EditaisList = ({ orgId }: { orgId: string }) => {
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar edital..." className="pl-9" />
         </div>
         <Select value={filter} onValueChange={setFilter}>
-          <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos</SelectItem>
             <SelectItem value="draft">Rascunho</SelectItem>
             <SelectItem value="published">Publicado</SelectItem>
             <SelectItem value="closed">Encerrado</SelectItem>
+            <SelectItem value="em_avaliacao">Em Avaliação</SelectItem>
+            <SelectItem value="resultado_preliminar">Resultado Preliminar</SelectItem>
+            <SelectItem value="resultado_final">Resultado Final</SelectItem>
+            <SelectItem value="homologado">Homologado</SelectItem>
+            <SelectItem value="outorgado">Outorgado</SelectItem>
+            <SelectItem value="cancelado">Cancelado</SelectItem>
           </SelectContent>
         </Select>
       </div>
