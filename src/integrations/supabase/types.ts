@@ -1872,9 +1872,10 @@ export type Database = {
           email: string
           expires_at: string
           id: string
+          invite_code: string | null
           org_id: string
           reviewer_id: string
-          token_hash: string
+          token_hash: string | null
           used_at: string | null
         }
         Insert: {
@@ -1882,9 +1883,10 @@ export type Database = {
           email: string
           expires_at: string
           id?: string
+          invite_code?: string | null
           org_id: string
           reviewer_id: string
-          token_hash: string
+          token_hash?: string | null
           used_at?: string | null
         }
         Update: {
@@ -1892,9 +1894,10 @@ export type Database = {
           email?: string
           expires_at?: string
           id?: string
+          invite_code?: string | null
           org_id?: string
           reviewer_id?: string
-          token_hash?: string
+          token_hash?: string | null
           used_at?: string | null
         }
         Relationships: [
