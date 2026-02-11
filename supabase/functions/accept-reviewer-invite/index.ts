@@ -13,9 +13,10 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { token, password } = await req.json();
+    const { token, password, cpf } = await req.json();
     if (!token || !password) throw new Error("Missing token or password");
     if (password.length < 6) throw new Error("Password must be at least 6 characters");
+    if (!cpf || cpf.length !== 11) throw new Error("CPF is required (11 digits)");
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -93,6 +94,10 @@ const handler = async (req: Request): Promise<Response> => {
       }, { onConflict: "user_id,role" })
       .select();
 
+    // Hash CPF for storage
+    const cpfHash = await hashToken(cpf);
+    const cpfLast4 = cpf.slice(-4);
+
     // Update reviewer record
     await adminClient
       .from("reviewers")
@@ -100,6 +105,8 @@ const handler = async (req: Request): Promise<Response> => {
         user_id: userId,
         status: "ACTIVE",
         accepted_at: new Date().toISOString(),
+        cpf_hash: cpfHash,
+        cpf_last4: cpfLast4,
       })
       .eq("id", reviewer.id);
 

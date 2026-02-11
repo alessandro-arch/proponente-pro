@@ -1919,6 +1919,8 @@ export type Database = {
           accepted_at: string | null
           areas: Json
           bio: string | null
+          cpf_hash: string | null
+          cpf_last4: string | null
           created_at: string
           email: string
           full_name: string
@@ -1940,6 +1942,8 @@ export type Database = {
           accepted_at?: string | null
           areas?: Json
           bio?: string | null
+          cpf_hash?: string | null
+          cpf_last4?: string | null
           created_at?: string
           email: string
           full_name: string
@@ -1961,6 +1965,8 @@ export type Database = {
           accepted_at?: string | null
           areas?: Json
           bio?: string | null
+          cpf_hash?: string | null
+          cpf_last4?: string | null
           created_at?: string
           email?: string
           full_name?: string

@@ -21,8 +21,34 @@ const ReviewerInvitePage = () => {
   const [reviewer, setReviewer] = useState<any>(null);
 
   const [password, setPassword] = useState("");
+  const [cpf, setCpf] = useState("");
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [acceptConflict, setAcceptConflict] = useState(false);
+
+  const formatCpf = (value: string): string => {
+    const clean = value.replace(/\D/g, "").slice(0, 11);
+    if (clean.length <= 3) return clean;
+    if (clean.length <= 6) return `${clean.slice(0, 3)}.${clean.slice(3)}`;
+    if (clean.length <= 9) return `${clean.slice(0, 3)}.${clean.slice(3, 6)}.${clean.slice(6)}`;
+    return `${clean.slice(0, 3)}.${clean.slice(3, 6)}.${clean.slice(6, 9)}-${clean.slice(9)}`;
+  };
+
+  const validateCpf = (cpfVal: string): boolean => {
+    const clean = cpfVal.replace(/\D/g, "");
+    if (clean.length !== 11 || /^(\d)\1+$/.test(clean)) return false;
+    let sum = 0;
+    for (let i = 0; i < 9; i++) sum += parseInt(clean[i]) * (10 - i);
+    let rest = (sum * 10) % 11;
+    if (rest === 10) rest = 0;
+    if (rest !== parseInt(clean[9])) return false;
+    sum = 0;
+    for (let i = 0; i < 10; i++) sum += parseInt(clean[i]) * (11 - i);
+    rest = (sum * 10) % 11;
+    if (rest === 10) rest = 0;
+    return rest === parseInt(clean[10]);
+  };
+
+  const cpfClean = cpf.replace(/\D/g, "");
 
   useEffect(() => {
     const validateToken = async () => {
@@ -64,6 +90,10 @@ const ReviewerInvitePage = () => {
       toast.error("A senha deve ter pelo menos 6 caracteres.");
       return;
     }
+    if (!validateCpf(cpfClean)) {
+      toast.error("CPF inválido.");
+      return;
+    }
 
     setSubmitting(true);
 
@@ -72,6 +102,7 @@ const ReviewerInvitePage = () => {
         body: {
           token,
           password,
+          cpf: cpfClean,
         },
       });
 
@@ -155,6 +186,19 @@ const ReviewerInvitePage = () => {
           </div>
 
           <div className="space-y-1.5">
+            <Label>CPF <span className="text-destructive">*</span></Label>
+            <Input
+              value={cpf}
+              onChange={(e) => setCpf(formatCpf(e.target.value))}
+              placeholder="000.000.000-00"
+              maxLength={14}
+            />
+            {cpfClean.length === 11 && !validateCpf(cpfClean) && (
+              <p className="text-xs text-destructive">CPF inválido</p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
             <Label>Crie sua senha <span className="text-destructive">*</span></Label>
             <Input
               type="password"
@@ -193,7 +237,7 @@ const ReviewerInvitePage = () => {
           <Button
             className="w-full"
             onClick={handleSubmit}
-            disabled={!acceptTerms || !acceptConflict || !password || submitting}
+            disabled={!acceptTerms || !acceptConflict || !password || cpfClean.length !== 11 || !validateCpf(cpfClean) || submitting}
           >
             {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             Aceitar e Finalizar

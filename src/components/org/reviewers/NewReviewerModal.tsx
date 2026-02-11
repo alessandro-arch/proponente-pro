@@ -26,6 +26,7 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
   const [form, setForm] = useState({
     full_name: "",
     email: "",
+    cpf: "",
     lattes_url: "",
     orcid: "",
     bio: "",
@@ -43,7 +44,7 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
   const [keywordInput, setKeywordInput] = useState("");
 
   const resetForm = () => {
-    setForm({ full_name: "", email: "", lattes_url: "", orcid: "", bio: "", sendInvite: true });
+    setForm({ full_name: "", email: "", cpf: "", lattes_url: "", orcid: "", bio: "", sendInvite: true });
     setInstitution({ institution_id: null, institution_name: "", institution_custom_name: null, institution_type: null });
     setKeywords([]);
     setKeywordInput("");
@@ -70,9 +71,47 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
     setKeywordInput("");
   };
 
+  const hashCpf = async (cpf: string): Promise<string> => {
+    const clean = cpf.replace(/\D/g, "");
+    const encoder = new TextEncoder();
+    const data = encoder.encode(clean);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+  };
+
+  const validateCpf = (cpf: string): boolean => {
+    const clean = cpf.replace(/\D/g, "");
+    if (clean.length !== 11 || /^(\d)\1+$/.test(clean)) return false;
+    let sum = 0;
+    for (let i = 0; i < 9; i++) sum += parseInt(clean[i]) * (10 - i);
+    let rest = (sum * 10) % 11;
+    if (rest === 10) rest = 0;
+    if (rest !== parseInt(clean[9])) return false;
+    sum = 0;
+    for (let i = 0; i < 10; i++) sum += parseInt(clean[i]) * (11 - i);
+    rest = (sum * 10) % 11;
+    if (rest === 10) rest = 0;
+    return rest === parseInt(clean[10]);
+  };
+
+  const formatCpf = (value: string): string => {
+    const clean = value.replace(/\D/g, "").slice(0, 11);
+    if (clean.length <= 3) return clean;
+    if (clean.length <= 6) return `${clean.slice(0, 3)}.${clean.slice(3)}`;
+    if (clean.length <= 9) return `${clean.slice(0, 3)}.${clean.slice(3, 6)}.${clean.slice(6)}`;
+    return `${clean.slice(0, 3)}.${clean.slice(3, 6)}.${clean.slice(6, 9)}-${clean.slice(9)}`;
+  };
+
   const createMutation = useMutation({
     mutationFn: async () => {
       const email = form.email.toLowerCase().trim();
+      const cpfClean = form.cpf.replace(/\D/g, "");
+
+      if (!validateCpf(cpfClean)) throw new Error("CPF inválido.");
+
+      const cpfHashed = await hashCpf(cpfClean);
+      const cpfLast4 = cpfClean.slice(-4);
 
       const { data: reviewer, error } = await supabase
         .from("reviewers")
@@ -80,6 +119,8 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
           org_id: orgId,
           full_name: form.full_name.trim(),
           email,
+          cpf_hash: cpfHashed,
+          cpf_last4: cpfLast4,
           institution: institution.institution_name.trim(),
           institution_id: institution.institution_id || null,
           institution_custom_name: institution.institution_custom_name || null,
@@ -134,7 +175,8 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
   });
 
   const institutionValid = !!institution.institution_id || (!!institution.institution_custom_name?.trim() && !!institution.institution_type);
-  const isValid = form.full_name.trim() && form.email.trim() && institutionValid && areas.length > 0;
+  const cpfClean = form.cpf.replace(/\D/g, "");
+  const isValid = form.full_name.trim() && form.email.trim() && cpfClean.length === 11 && institutionValid && areas.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -154,6 +196,19 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
               <Label>E-mail <span className="text-destructive">*</span></Label>
               <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>CPF <span className="text-destructive">*</span></Label>
+            <Input
+              value={form.cpf}
+              onChange={(e) => setForm({ ...form, cpf: formatCpf(e.target.value) })}
+              placeholder="000.000.000-00"
+              maxLength={14}
+            />
+            {cpfClean.length === 11 && !validateCpf(cpfClean) && (
+              <p className="text-xs text-destructive">CPF inválido</p>
+            )}
           </div>
 
           <InstitutionSelector
