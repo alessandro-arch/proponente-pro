@@ -28,7 +28,7 @@ const handler = async (req: Request): Promise<Response> => {
     const { data: { user }, error: authError } = await anonClient.auth.getUser();
     if (authError || !user) throw new Error("Not authenticated");
 
-    const { reviewerId, orgId } = await req.json();
+    const { reviewerId, orgId, inviteCode } = await req.json();
     if (!reviewerId || !orgId) throw new Error("Missing reviewerId or orgId");
 
     // Use service role to create invite
@@ -63,15 +63,19 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Create invite
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    const inviteData: any = {
+      org_id: orgId,
+      reviewer_id: reviewerId,
+      email: reviewer.email,
+      token_hash: tokenHash,
+      expires_at: expiresAt.toISOString(),
+    };
+    if (inviteCode) {
+      inviteData.invite_code = inviteCode.toUpperCase().trim();
+    }
     const { error: inviteErr } = await adminClient
       .from("reviewer_invites")
-      .insert({
-        org_id: orgId,
-        reviewer_id: reviewerId,
-        email: reviewer.email,
-        token_hash: tokenHash,
-        expires_at: expiresAt.toISOString(),
-      });
+      .insert(inviteData);
     if (inviteErr) throw inviteErr;
 
     // Update reviewer status
@@ -93,6 +97,8 @@ const handler = async (req: Request): Promise<Response> => {
     // Send email
     const appUrl = req.headers.get("origin") || "https://proponente-pro.lovable.app";
     const inviteUrl = `${appUrl}/invite/reviewer?token=${token}`;
+    const activateUrl = `${appUrl}/reviewer/activate`;
+    const codeDisplay = inviteData.invite_code || null;
 
     const resendKey = Deno.env.get("RESEND_API_KEY");
     if (resendKey) {
@@ -124,6 +130,7 @@ const handler = async (req: Request): Promise<Response> => {
                 <p>Você foi convidado(a) pela organização <strong>${org?.name || "—"}</strong> para atuar como avaliador(a) no SisConnecta.</p>
                 <p>Clique no botão abaixo para aceitar o convite e criar sua conta:</p>
                 <div class="cta"><a href="${inviteUrl}">Aceitar Convite</a></div>
+                ${codeDisplay ? `<p style="text-align:center; color:#475569; font-size:14px; margin-top:8px;">Ou use o código: <strong style="font-family:monospace; font-size:16px; letter-spacing:2px;">${codeDisplay}</strong><br/>em <a href="${activateUrl}">${activateUrl}</a></p>` : ''}
                 <p style="color: #64748b; font-size: 14px;">Este convite é válido por 7 dias. Caso expire, solicite um novo convite à organização.</p>
               </div>
               <div class="footer"><p>SisConnecta Editais — Email automático, não responda.</p></div>
@@ -134,7 +141,7 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    return new Response(JSON.stringify({ success: true, inviteUrl }), {
+    return new Response(JSON.stringify({ success: true, inviteUrl, inviteCode: codeDisplay }), {
       status: 200,
       headers: { "Content-Type": "application/json", ...corsHeaders },
     });

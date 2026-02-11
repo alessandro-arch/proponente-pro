@@ -27,6 +27,7 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
     full_name: "",
     email: "",
     cpf: "",
+    inviteCode: "",
     lattes_url: "",
     orcid: "",
     bio: "",
@@ -44,7 +45,7 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
   const [keywordInput, setKeywordInput] = useState("");
 
   const resetForm = () => {
-    setForm({ full_name: "", email: "", cpf: "", lattes_url: "", orcid: "", bio: "", sendInvite: true });
+    setForm({ full_name: "", email: "", cpf: "", inviteCode: "", lattes_url: "", orcid: "", bio: "", sendInvite: true });
     setInstitution({ institution_id: null, institution_name: "", institution_custom_name: null, institution_type: null });
     setKeywords([]);
     setKeywordInput("");
@@ -156,7 +157,7 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
       if (form.sendInvite) {
         try {
           await supabase.functions.invoke("send-reviewer-invite", {
-            body: { reviewerId: reviewer.id, orgId },
+            body: { reviewerId: reviewer.id, orgId, inviteCode: form.inviteCode.trim() || undefined },
           });
         } catch {
           console.error("Failed to send invite email");
@@ -176,7 +177,8 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
 
   const institutionValid = !!institution.institution_id || (!!institution.institution_custom_name?.trim() && !!institution.institution_type);
   const cpfClean = form.cpf.replace(/\D/g, "");
-  const isValid = form.full_name.trim() && form.email.trim() && cpfClean.length === 11 && institutionValid && areas.length > 0;
+  const inviteCodeValid = !form.sendInvite || (form.inviteCode.length >= 6 && form.inviteCode.length <= 32);
+  const isValid = form.full_name.trim() && form.email.trim() && cpfClean.length === 11 && institutionValid && areas.length > 0 && inviteCodeValid;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -289,6 +291,23 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
             />
             <Label htmlFor="sendInvite" className="cursor-pointer">Enviar convite por e-mail agora</Label>
           </div>
+
+          {form.sendInvite && (
+            <div className="space-y-1.5 pl-6">
+              <Label>Código do Convite <span className="text-destructive">*</span></Label>
+              <Input
+                value={form.inviteCode}
+                onChange={(e) => setForm({ ...form, inviteCode: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 32) })}
+                placeholder="EX: EDITAL-PQ-2026-F1"
+                className="font-mono tracking-wider"
+                maxLength={32}
+              />
+              <p className="text-xs text-muted-foreground">Apenas A-Z, 0-9 e hífen. 6 a 32 caracteres. Único por organização.</p>
+              {form.inviteCode.length > 0 && form.inviteCode.length < 6 && (
+                <p className="text-xs text-destructive">Mínimo 6 caracteres</p>
+              )}
+            </div>
+          )}
         </div>
 
         <DialogFooter>
