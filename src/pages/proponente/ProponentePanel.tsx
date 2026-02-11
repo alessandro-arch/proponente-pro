@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Navigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,16 @@ type NavKey = typeof NAV_ITEMS[number]["key"];
 const ProponentePanel = () => {
   const { user, loading, membership, signOut } = useAuth();
   const [activeNav, setActiveNav] = useState<NavKey>("editais");
+
+  // Listen for navigation events from child components (e.g., empty state CTA)
+  React.useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail === "editais" || detail === "propostas") setActiveNav(detail);
+    };
+    window.addEventListener("navigate-proponente", handler);
+    return () => window.removeEventListener("navigate-proponente", handler);
+  }, []);
 
   if (loading) {
     return (
