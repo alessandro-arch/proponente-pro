@@ -12,8 +12,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { TextFieldWithCounter } from "@/components/ui/text-field-with-counter";
 import BudgetModule, { emptyBudget, type BudgetData } from "@/components/proponente/BudgetModule";
+import CnpqAreaSelector from "@/components/CnpqAreaSelector";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, Save, Send, AlertTriangle, CheckCircle2, Download, FileText } from "lucide-react";
+import { Loader2, ArrowLeft, ArrowRight, Save, Send, AlertTriangle, CheckCircle2, Download, FileText } from "lucide-react";
 
 interface SubmissionFormProps {
   editalId: string;
@@ -54,6 +55,8 @@ const SubmissionForm = ({ editalId, editalTitle, editalEndDate, onBack }: Submis
   const [snapshot, setSnapshot] = useState<SnapshotData | null>(null);
   const [formVersionId, setFormVersionId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, any>>({});
+  const [cnpqAreaCode, setCnpqAreaCode] = useState<string | null>(null);
+  const [step, setStep] = useState<"area" | "form">("area");
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -78,7 +81,9 @@ const SubmissionForm = ({ editalId, editalTitle, editalEndDate, onBack }: Submis
     if (existingSub && (existingSub as any).status === "submitted") {
       setSubmission(existingSub);
       setAnswers((existingSub as any).answers || {});
+      setCnpqAreaCode((existingSub as any).cnpq_area_code || null);
       setIsSubmitted(true);
+      setStep("form");
       // Load snapshot from form_version
       if ((existingSub as any).form_version_id) {
         const { data: ver } = await supabase
@@ -113,14 +118,20 @@ const SubmissionForm = ({ editalId, editalTitle, editalEndDate, onBack }: Submis
       }
     }
 
-    // Load draft answers
+    // Load draft answers and area
     const { data: draft } = await supabase
       .from("edital_submission_drafts")
-      .select("answers")
+      .select("answers, cnpq_area_code")
       .eq("edital_id", editalId)
       .eq("user_id", user.id)
       .maybeSingle();
-    if (draft) setAnswers((draft as any).answers || {});
+    if (draft) {
+      setAnswers((draft as any).answers || {});
+      if ((draft as any).cnpq_area_code) {
+        setCnpqAreaCode((draft as any).cnpq_area_code);
+        setStep("form");
+      }
+    }
 
     setLoading(false);
   }, [editalId, user]);
@@ -142,7 +153,8 @@ const SubmissionForm = ({ editalId, editalTitle, editalEndDate, onBack }: Submis
       edital_id: editalId,
       user_id: user.id,
       answers,
-    }, { onConflict: "edital_id,user_id" });
+      cnpq_area_code: cnpqAreaCode,
+    } as any, { onConflict: "edital_id,user_id" });
   };
 
   const saveDraft = async () => {
@@ -152,7 +164,8 @@ const SubmissionForm = ({ editalId, editalTitle, editalEndDate, onBack }: Submis
       edital_id: editalId,
       user_id: user.id,
       answers,
-    }, { onConflict: "edital_id,user_id" });
+      cnpq_area_code: cnpqAreaCode,
+    } as any, { onConflict: "edital_id,user_id" });
     setSaving(false);
     if (error) toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
     else toast({ title: "Rascunho salvo!" });
@@ -164,6 +177,13 @@ const SubmissionForm = ({ editalId, editalTitle, editalEndDate, onBack }: Submis
 
   const handleSubmit = async () => {
     if (!user || !snapshot || !formVersionId) return;
+
+    // Validate CNPq area
+    if (!cnpqAreaCode) {
+      toast({ title: "Área do Conhecimento obrigatória", description: "Selecione uma área CNPq antes de submeter.", variant: "destructive" });
+      setConfirmOpen(false);
+      return;
+    }
 
     // Validate required fields
     const allQuestions = snapshot.sections.flatMap(s => s.questions);
@@ -248,9 +268,10 @@ const SubmissionForm = ({ editalId, editalTitle, editalEndDate, onBack }: Submis
       protocol,
       form_version_id: formVersionId,
       answers,
+      cnpq_area_code: cnpqAreaCode,
       status: "submitted",
       submitted_at: new Date().toISOString(),
-    }).select().single();
+    } as any).select().single();
 
     if (error) {
       toast({ title: "Erro ao submeter", description: error.message, variant: "destructive" });
@@ -459,13 +480,70 @@ const SubmissionForm = ({ editalId, editalTitle, editalEndDate, onBack }: Submis
     );
   }
 
-  // Draft / Fill form view
-  return (
-    <div className="space-y-6 max-w-3xl mx-auto">
-      <div className="flex items-center justify-between">
+  // Step 1: Area selection
+  if (step === "area") {
+    return (
+      <div className="space-y-6 max-w-3xl mx-auto">
         <Button variant="ghost" size="sm" onClick={onBack}>
           <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
         </Button>
+
+        <div>
+          <h2 className="text-lg font-bold text-foreground">{editalTitle}</h2>
+          {editalEndDate && (
+            <p className="text-sm text-muted-foreground mt-1">
+              Prazo: até {new Date(editalEndDate).toLocaleDateString("pt-BR")}
+            </p>
+          )}
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Badge variant="outline" className="text-xs">Etapa 1</Badge>
+              Área do Conhecimento (CNPq)
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Selecione a área do conhecimento principal da sua proposta. Esta informação será usada para direcionar a avaliação por especialistas da área e <strong>não será visível aos avaliadores</strong>.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <CnpqAreaSelector
+              value={cnpqAreaCode}
+              onChange={(v) => setCnpqAreaCode(v || null)}
+              required
+              label="Área do Conhecimento *"
+            />
+            <div className="flex justify-end">
+              <Button
+                onClick={() => {
+                  if (!cnpqAreaCode) {
+                    toast({ title: "Selecione uma área", description: "A área do conhecimento é obrigatória para continuar.", variant: "destructive" });
+                    return;
+                  }
+                  saveDraftSilent();
+                  setStep("form");
+                }}
+              >
+                Avançar para o formulário <ArrowRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Step 2: Draft / Fill form view
+  return (
+    <div className="space-y-6 max-w-3xl mx-auto">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setStep("area")}>
+            <ArrowLeft className="w-4 h-4 mr-1" /> Área
+          </Button>
+          <Badge variant="secondary" className="text-xs">Etapa 2 — Formulário</Badge>
+        </div>
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={saveDraft} disabled={saving || isExpired}>
             {saving && <Loader2 className="w-4 h-4 animate-spin mr-1" />}

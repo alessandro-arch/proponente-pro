@@ -16,6 +16,7 @@ interface ReviewerAssignmentProps {
   proposalBlindCode: string;
   editalId: string;
   orgId: string;
+  submissionCnpqArea?: string | null;
   onAssigned: () => void;
 }
 
@@ -24,10 +25,12 @@ interface ReviewerOption {
   full_name: string | null;
   email: string | null;
   already_assigned: boolean;
+  area_match: boolean;
+  reviewer_areas: string;
 }
 
 const ReviewerAssignment = ({
-  open, onClose, proposalId, proposalBlindCode, editalId, orgId, onAssigned,
+  open, onClose, proposalId, proposalBlindCode, editalId, orgId, submissionCnpqArea, onAssigned,
 }: ReviewerAssignmentProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -56,10 +59,17 @@ const ReviewerAssignment = ({
         return;
       }
 
-      // Get profiles
+      // Get profiles (with research_area_cnpq)
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("user_id, full_name, email")
+        .select("user_id, full_name, email, research_area_cnpq")
+        .in("user_id", memberIds);
+
+      // Get reviewer records from reviewers table for area info
+      const { data: reviewerRecords } = await supabase
+        .from("reviewers")
+        .select("user_id, areas")
+        .eq("org_id", orgId)
         .in("user_id", memberIds);
 
       // Get existing assignments for this proposal
@@ -70,13 +80,48 @@ const ReviewerAssignment = ({
 
       const assignedIds = new Set((existing || []).map((e: any) => e.reviewer_user_id));
 
+      // Extract submission area code prefix for matching (e.g. "10000003" from "10000003 - CIÊNCIAS EXATAS...")
+      const submissionAreaPrefix = submissionCnpqArea?.split(" - ")[0]?.trim() || "";
+
       const options: ReviewerOption[] = memberIds.map((uid: string) => {
         const profile = (profiles || []).find((p: any) => p.user_id === uid);
+        const reviewerRec = (reviewerRecords || []).find((r: any) => r.user_id === uid);
+        
+        // Check area match: compare area code prefixes
+        const profileArea = profile?.research_area_cnpq || "";
+        const profileAreaCode = profileArea.split(" - ")[0]?.trim() || "";
+        
+        // Match if they share the same grande área (first 1-2 digits) or more specific match
+        let areaMatch = false;
+        if (submissionAreaPrefix && profileAreaCode) {
+          // Match at grande área level (first digit group matches)
+          const subGrandeArea = submissionAreaPrefix.substring(0, 1);
+          const revGrandeArea = profileAreaCode.substring(0, 1);
+          areaMatch = subGrandeArea === revGrandeArea;
+        }
+
+        // Also check reviewers table areas
+        let reviewerAreasStr = profileArea;
+        if (reviewerRec?.areas) {
+          const areasArr = Array.isArray(reviewerRec.areas) ? reviewerRec.areas : [];
+          if (areasArr.length > 0) {
+            reviewerAreasStr = areasArr.map((a: any) => typeof a === 'string' ? a : a?.name || '').join(', ');
+            if (!areaMatch && submissionAreaPrefix) {
+              areaMatch = areasArr.some((a: any) => {
+                const code = typeof a === 'string' ? a.split(" - ")[0]?.trim() : '';
+                return code && submissionAreaPrefix.substring(0, 1) === code.substring(0, 1);
+              });
+            }
+          }
+        }
+
         return {
           user_id: uid,
           full_name: profile?.full_name || null,
           email: profile?.email || null,
           already_assigned: assignedIds.has(uid),
+          area_match: !submissionAreaPrefix || areaMatch, // if no area filter, all match
+          reviewer_areas: reviewerAreasStr,
         };
       });
 
@@ -129,7 +174,8 @@ const ReviewerAssignment = ({
     onClose();
   };
 
-  const availableReviewers = reviewers.filter(r => !r.already_assigned);
+  const availableReviewers = reviewers.filter(r => !r.already_assigned && r.area_match);
+  const outOfAreaReviewers = reviewers.filter(r => !r.already_assigned && !r.area_match);
   const assignedReviewers = reviewers.filter(r => r.already_assigned);
 
   return (
@@ -159,33 +205,68 @@ const ReviewerAssignment = ({
               </div>
             )}
 
-            {availableReviewers.length === 0 ? (
+            {availableReviewers.length === 0 && outOfAreaReviewers.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">
                 Nenhum avaliador disponível. Adicione membros com papel "reviewer" na organização.
               </p>
             ) : (
-              <div>
-                <Label className="text-xs text-muted-foreground">Selecione avaliadores:</Label>
-                <div className="mt-2 space-y-2 max-h-60 overflow-y-auto">
-                  {availableReviewers.map(r => (
-                    <label
-                      key={r.user_id}
-                      className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/50 cursor-pointer transition-colors"
-                    >
-                      <Checkbox
-                        checked={selected.includes(r.user_id)}
-                        onCheckedChange={() => toggle(r.user_id)}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">
-                          {r.full_name || "Sem nome"}
-                        </p>
-                        {r.email && <p className="text-xs text-muted-foreground truncate">{r.email}</p>}
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </div>
+              <>
+                {availableReviewers.length > 0 && (
+                  <div>
+                    <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                      Avaliadores da área
+                      {submissionCnpqArea && <Badge variant="outline" className="text-[10px]">Compatíveis</Badge>}
+                    </Label>
+                    <div className="mt-2 space-y-2 max-h-48 overflow-y-auto">
+                      {availableReviewers.map(r => (
+                        <label
+                          key={r.user_id}
+                          className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/50 cursor-pointer transition-colors"
+                        >
+                          <Checkbox
+                            checked={selected.includes(r.user_id)}
+                            onCheckedChange={() => toggle(r.user_id)}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">
+                              {r.full_name || "Sem nome"}
+                            </p>
+                            {r.email && <p className="text-xs text-muted-foreground truncate">{r.email}</p>}
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {outOfAreaReviewers.length > 0 && (
+                  <div>
+                    <Label className="text-xs text-destructive flex items-center gap-1">
+                      Fora da área da proposta
+                      <Badge variant="outline" className="text-[10px] border-destructive/30 text-destructive">Não recomendado</Badge>
+                    </Label>
+                    <div className="mt-2 space-y-2 max-h-32 overflow-y-auto opacity-70">
+                      {outOfAreaReviewers.map(r => (
+                        <label
+                          key={r.user_id}
+                          className="flex items-center gap-3 p-3 rounded-lg border border-destructive/20 hover:bg-muted/50 cursor-pointer transition-colors"
+                        >
+                          <Checkbox
+                            checked={selected.includes(r.user_id)}
+                            onCheckedChange={() => toggle(r.user_id)}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">
+                              {r.full_name || "Sem nome"}
+                            </p>
+                            {r.email && <p className="text-xs text-muted-foreground truncate">{r.email}</p>}
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
             <Button

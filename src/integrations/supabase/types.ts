@@ -377,6 +377,7 @@ export type Database = {
       edital_submission_drafts: {
         Row: {
           answers: Json
+          cnpq_area_code: string | null
           created_at: string
           edital_id: string
           id: string
@@ -385,6 +386,7 @@ export type Database = {
         }
         Insert: {
           answers?: Json
+          cnpq_area_code?: string | null
           created_at?: string
           edital_id: string
           id?: string
@@ -393,6 +395,7 @@ export type Database = {
         }
         Update: {
           answers?: Json
+          cnpq_area_code?: string | null
           created_at?: string
           edital_id?: string
           id?: string
@@ -444,6 +447,7 @@ export type Database = {
       edital_submissions: {
         Row: {
           answers: Json
+          cnpq_area_code: string | null
           created_at: string
           edital_id: string
           form_version_id: string | null
@@ -456,6 +460,7 @@ export type Database = {
         }
         Insert: {
           answers?: Json
+          cnpq_area_code?: string | null
           created_at?: string
           edital_id: string
           form_version_id?: string | null
@@ -468,6 +473,7 @@ export type Database = {
         }
         Update: {
           answers?: Json
+          cnpq_area_code?: string | null
           created_at?: string
           edital_id?: string
           form_version_id?: string | null
