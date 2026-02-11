@@ -29,7 +29,7 @@ const SubmissionsList = ({ editalId, editalTitle, orgId }: SubmissionsListProps)
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedSubmission, setSelectedSubmission] = useState<any>(null);
-  const [assignDialog, setAssignDialog] = useState<{ proposalId: string; blindCode: string } | null>(null);
+  const [assignDialog, setAssignDialog] = useState<{ proposalId: string; blindCode: string; cnpqArea?: string | null } | null>(null);
 
   const { data: submissions, isLoading, refetch } = useQuery({
     queryKey: ["admin-submissions", editalId],
@@ -143,6 +143,12 @@ const SubmissionsList = ({ editalId, editalTitle, orgId }: SubmissionsListProps)
                 <Label className="text-xs text-muted-foreground">Data de submissão</Label>
                 <p className="text-foreground">{selectedSubmission.submitted_at ? new Date(selectedSubmission.submitted_at).toLocaleString("pt-BR") : "—"}</p>
               </div>
+              {selectedSubmission.cnpq_area_code && (
+                <div className="col-span-2">
+                  <Label className="text-xs text-muted-foreground">Área do Conhecimento (CNPq)</Label>
+                  <p className="text-foreground text-sm">{selectedSubmission.cnpq_area_code}</p>
+                </div>
+              )}
             </div>
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={() => {
@@ -182,7 +188,11 @@ const SubmissionsList = ({ editalId, editalTitle, orgId }: SubmissionsListProps)
                 // Find proposal for this submission
                 const proposal = (proposals || []).find((p: any) => p.proponente_user_id === selectedSubmission.user_id);
                 if (proposal && orgId) {
-                  setAssignDialog({ proposalId: proposal.id, blindCode: proposal.blind_code || selectedSubmission.protocol });
+                  setAssignDialog({
+                    proposalId: proposal.id,
+                    blindCode: proposal.blind_code || selectedSubmission.protocol,
+                    cnpqArea: selectedSubmission.cnpq_area_code,
+                  });
                 }
               }} disabled={!orgId}>
                 <Users className="w-4 h-4 mr-1" /> Enviar para avaliação
@@ -304,6 +314,7 @@ const SubmissionsList = ({ editalId, editalTitle, orgId }: SubmissionsListProps)
           proposalBlindCode={assignDialog.blindCode}
           editalId={editalId}
           orgId={orgId}
+          submissionCnpqArea={assignDialog.cnpqArea}
           onAssigned={() => { refetch(); }}
         />
       )}
