@@ -204,6 +204,8 @@ export type Database = {
       }
       editais: {
         Row: {
+          blind_code_prefix: string | null
+          blind_code_strategy: string
           blind_review_enabled: boolean
           cancellation_reason: string | null
           created_at: string
@@ -223,6 +225,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          blind_code_prefix?: string | null
+          blind_code_strategy?: string
           blind_review_enabled?: boolean
           cancellation_reason?: string | null
           created_at?: string
@@ -242,6 +246,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          blind_code_prefix?: string | null
+          blind_code_strategy?: string
           blind_review_enabled?: boolean
           cancellation_reason?: string | null
           created_at?: string
@@ -1679,6 +1685,7 @@ export type Database = {
       proposals: {
         Row: {
           blind_code: string | null
+          blind_code_generated_at: string | null
           created_at: string
           edital_id: string
           id: string
@@ -1690,6 +1697,7 @@ export type Database = {
         }
         Insert: {
           blind_code?: string | null
+          blind_code_generated_at?: string | null
           created_at?: string
           edital_id: string
           id?: string
@@ -1701,6 +1709,7 @@ export type Database = {
         }
         Update: {
           blind_code?: string | null
+          blind_code_generated_at?: string | null
           created_at?: string
           edital_id?: string
           id?: string

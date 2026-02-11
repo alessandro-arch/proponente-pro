@@ -66,6 +66,7 @@ interface Assignment {
   knowledge_area: string | null;
   review_deadline: string | null;
   has_draft: boolean;
+  blind_review_enabled: boolean;
 }
 
 type MetricFilter = "all" | "assigned" | "in_progress" | "submitted" | "critical";
@@ -104,7 +105,7 @@ const ReviewerPanel = () => {
           id, proposal_id, status, assigned_at, submitted_at,
           proposals!inner (
             id, edital_id, knowledge_area_id, status, blind_code,
-            editais!inner ( title, review_deadline ),
+            editais!inner ( title, review_deadline, blind_review_enabled ),
             knowledge_areas ( name )
           )
         `)
@@ -147,6 +148,7 @@ const ReviewerPanel = () => {
       knowledge_area: a.proposals?.knowledge_areas?.name || null,
       review_deadline: a.proposals?.editais?.review_deadline || null,
       has_draft: draftAssignmentIds.has(a.id),
+      blind_review_enabled: a.proposals?.editais?.blind_review_enabled ?? true,
     }));
 
     setAssignments(mapped);
@@ -432,18 +434,20 @@ const ReviewerPanel = () => {
         </div>
       </header>
 
-      {/* Blind review notice */}
-      <div className="bg-accent/30 border-b border-accent/50">
-        <div className="container mx-auto px-4 py-3 flex items-center gap-3">
-          <ShieldCheck className="w-5 h-5 text-accent-foreground flex-shrink-0" />
-          <div>
-            <p className="text-xs font-semibold text-accent-foreground">Avaliação Cega — Blind Review</p>
-            <p className="text-xs text-accent-foreground/80">
-              Este processo adota avaliação cega. Qualquer tentativa de identificação do proponente viola as normas do edital.
-            </p>
+      {/* Blind review notice - only show if any assignment has blind review */}
+      {assignments.some(a => a.blind_review_enabled) && (
+        <div className="bg-accent/30 border-b border-accent/50">
+          <div className="container mx-auto px-4 py-3 flex items-center gap-3">
+            <ShieldCheck className="w-5 h-5 text-accent-foreground flex-shrink-0" />
+            <div>
+              <p className="text-xs font-semibold text-accent-foreground">Avaliação Cega — Blind Review</p>
+              <p className="text-xs text-accent-foreground/80">
+                Este processo adota avaliação cega. Qualquer tentativa de identificação do proponente viola as normas do edital.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <main className="container mx-auto px-4 py-6">
         <div className="flex flex-col lg:flex-row gap-6">
