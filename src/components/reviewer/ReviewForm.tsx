@@ -10,8 +10,136 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, Send, AlertTriangle, FileText, Eye, Lock } from "lucide-react";
+import { Loader2, ArrowLeft, Send, AlertTriangle, FileText, Eye, Lock, BookOpen } from "lucide-react";
 import AiReviewAssistant from "./AiReviewAssistant";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+
+interface FormQuestion {
+  section_id: string;
+  section_title: string;
+  section_order: number;
+  question_id: string;
+  label: string;
+  type: string;
+  question_order: number;
+}
+
+const ProposalContentCard = ({
+  anonymizedData,
+  proposalContent,
+  knowledgeArea,
+}: {
+  anonymizedData: any;
+  proposalContent: any;
+  knowledgeArea: string | null;
+}) => {
+  const formQuestions: FormQuestion[] = anonymizedData?.form_questions || [];
+  const answers = proposalContent || {};
+
+  // Group questions by section
+  const sections = formQuestions.reduce<Record<string, { title: string; order: number; questions: FormQuestion[] }>>(
+    (acc, q) => {
+      if (!acc[q.section_id]) {
+        acc[q.section_id] = { title: q.section_title, order: q.section_order, questions: [] };
+      }
+      acc[q.section_id].questions.push(q);
+      return acc;
+    },
+    {}
+  );
+
+  const sortedSections = Object.entries(sections).sort(([, a], [, b]) => a.order - b.order);
+  const hasStructuredQuestions = formQuestions.length > 0;
+
+  return (
+    <Card className="mb-6">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <BookOpen className="w-5 h-5 text-primary" /> Conteúdo da Proposta
+        </CardTitle>
+        <CardDescription>Dados anonimizados para avaliação cega — sem identificação do proponente</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {knowledgeArea && (
+          <div className="bg-muted/50 rounded-lg p-3 border border-border">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Área do Conhecimento</span>
+            <p className="text-sm font-medium text-foreground mt-1">{knowledgeArea}</p>
+          </div>
+        )}
+
+        {hasStructuredQuestions ? (
+          <Accordion type="multiple" defaultValue={sortedSections.map(([id]) => id)} className="space-y-2">
+            {sortedSections.map(([sectionId, section]) => (
+              <AccordionItem key={sectionId} value={sectionId} className="border border-border rounded-lg px-4">
+                <AccordionTrigger className="text-sm font-semibold text-foreground hover:no-underline">
+                  {section.title}
+                </AccordionTrigger>
+                <AccordionContent className="space-y-4 pb-4">
+                  {section.questions
+                    .sort((a, b) => a.question_order - b.question_order)
+                    .map((q) => {
+                      const answer = answers[q.question_id];
+                      return (
+                        <div key={q.question_id} className="space-y-1">
+                          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            {q.label}
+                          </Label>
+                          {answer ? (
+                            <div className="bg-card border border-border rounded-md p-3">
+                              <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                                {typeof answer === "object" ? JSON.stringify(answer, null, 2) : String(answer)}
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground italic">Sem resposta</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        ) : proposalContent && typeof proposalContent === "object" ? (
+          <div className="space-y-3">
+            {Object.entries(proposalContent).map(([key, value]) => (
+              <div key={key}>
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  {key.replace(/_/g, " ")}
+                </Label>
+                <div className="bg-card border border-border rounded-md p-3 mt-1">
+                  <p className="text-sm text-foreground whitespace-pre-wrap">{String(value)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground italic text-center py-4">
+            Nenhum conteúdo disponível para esta proposta.
+          </p>
+        )}
+
+        {/* Anonymized files */}
+        {anonymizedData?.files && (anonymizedData.files as any[]).length > 0 && (
+          <div className="pt-4 border-t border-border">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Anexos</span>
+            <div className="mt-2 space-y-2">
+              {(anonymizedData.files as any[]).map((file: any, i: number) => (
+                <div key={i} className="flex items-center gap-2 text-sm text-foreground p-2 rounded-md bg-muted/50 border border-border">
+                  <FileText className="w-4 h-4 text-muted-foreground" />
+                  <span className="font-medium">{file.file_ref}</span>
+                  {file.file_type && (
+                    <Badge variant="outline" className="text-xs">{file.file_type}</Badge>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
 
 interface Assignment {
   id: string;
@@ -266,52 +394,11 @@ const ReviewForm = ({ assignment, onBack }: { assignment: Assignment; onBack: ()
 
       <main className="container mx-auto px-4 py-8 max-w-3xl">
         {/* Proposal content (anonymized) */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <FileText className="w-5 h-5 text-primary" /> Conteúdo da Proposta
-            </CardTitle>
-            <CardDescription>Dados anonimizados para avaliação cega</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {(anonymizedData?.knowledge_area || assignment.knowledge_area) && (
-              <div className="mb-3">
-                <span className="text-xs font-medium text-muted-foreground">Área do Conhecimento:</span>
-                <p className="text-sm text-foreground">{anonymizedData?.knowledge_area || assignment.knowledge_area}</p>
-              </div>
-            )}
-            {proposalContent && typeof proposalContent === "object" ? (
-              <div className="space-y-3">
-                {Object.entries(proposalContent).map(([key, value]) => (
-                  <div key={key}>
-                    <span className="text-xs font-medium text-muted-foreground capitalize">{key.replace(/_/g, " ")}:</span>
-                    <p className="text-sm text-foreground whitespace-pre-wrap">{String(value)}</p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground italic">Nenhum conteúdo disponível para esta proposta.</p>
-            )}
-
-            {/* Anonymized files */}
-            {anonymizedData?.files && (anonymizedData.files as any[]).length > 0 && (
-              <div className="mt-4 pt-4 border-t border-border">
-                <span className="text-xs font-medium text-muted-foreground">Anexos:</span>
-                <div className="mt-2 space-y-1">
-                  {(anonymizedData.files as any[]).map((file: any, i: number) => (
-                    <div key={i} className="flex items-center gap-2 text-sm text-foreground">
-                      <FileText className="w-4 h-4 text-muted-foreground" />
-                      <span>{file.file_ref}</span>
-                      {file.file_type && (
-                        <Badge variant="outline" className="text-xs">{file.file_type}</Badge>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <ProposalContentCard
+          anonymizedData={anonymizedData}
+          proposalContent={proposalContent}
+          knowledgeArea={anonymizedData?.knowledge_area || assignment.knowledge_area}
+        />
 
         {/* Scoring criteria */}
         <Card className="mb-6">
