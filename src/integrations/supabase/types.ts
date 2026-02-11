@@ -1162,6 +1162,7 @@ export type Database = {
           address_street: string | null
           address_zipcode: string | null
           cpf: string | null
+          cpf_hash: string | null
           created_at: string
           email: string | null
           full_name: string | null
@@ -1197,6 +1198,7 @@ export type Database = {
           address_street?: string | null
           address_zipcode?: string | null
           cpf?: string | null
+          cpf_hash?: string | null
           created_at?: string
           email?: string | null
           full_name?: string | null
@@ -1232,6 +1234,7 @@ export type Database = {
           address_street?: string | null
           address_zipcode?: string | null
           cpf?: string | null
+          cpf_hash?: string | null
           created_at?: string
           email?: string | null
           full_name?: string | null
@@ -2296,6 +2299,10 @@ export type Database = {
       is_org_member: {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
+      }
+      lookup_email_by_cpf_hash: {
+        Args: { p_cpf_hash: string }
+        Returns: string
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
