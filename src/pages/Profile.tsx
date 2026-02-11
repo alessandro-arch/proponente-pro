@@ -13,6 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Save, User, MapPin, Briefcase, Bell, FileText, LogOut, ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
 import CnpqAreaSelector from "@/components/CnpqAreaSelector";
+import InstitutionSelector from "@/components/InstitutionSelector";
 import { Link } from "react-router-dom";
 
 const BRAZILIAN_STATES = [
@@ -38,7 +39,8 @@ const Profile = () => {
     const { full_name, phone, whatsapp, cpf, mini_bio, photo_url,
       address_street, address_number, address_complement, address_neighborhood,
       address_city, address_state, address_country, address_zipcode,
-      institution_affiliation, professional_position, lattes_url, instagram_url,
+      institution_affiliation, institution_id, institution_custom_name, institution_type,
+      professional_position, lattes_url, instagram_url,
       linkedin_url, research_area_cnpq, keywords,
       receive_news, receive_editais_notifications } = form;
 
@@ -46,7 +48,8 @@ const Profile = () => {
       full_name, phone, whatsapp, cpf, mini_bio, photo_url,
       address_street, address_number, address_complement, address_neighborhood,
       address_city, address_state, address_country, address_zipcode,
-      institution_affiliation, professional_position, lattes_url, instagram_url,
+      institution_affiliation, institution_id, institution_custom_name, institution_type,
+      professional_position, lattes_url, instagram_url,
       linkedin_url, research_area_cnpq, keywords,
       receive_news: receive_news ?? true,
       receive_editais_notifications: receive_editais_notifications ?? true,
@@ -218,15 +221,28 @@ const Profile = () => {
             <CardDescription>Informações acadêmicas e de pesquisa</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="institution_affiliation">Vínculo institucional</Label>
-                <Input id="institution_affiliation" value={form.institution_affiliation || ""} onChange={(e) => set("institution_affiliation", e.target.value)} placeholder="Universidade, instituto..." className="mt-1" />
-              </div>
-              <div>
-                <Label htmlFor="professional_position">Cargo / Função</Label>
-                <Input id="professional_position" value={form.professional_position || ""} onChange={(e) => set("professional_position", e.target.value)} placeholder="Professor, pesquisador..." className="mt-1" />
-              </div>
+            <InstitutionSelector
+              label="Vínculo institucional"
+              required
+              value={{
+                institution_id: form.institution_id || null,
+                institution_name: form.institution_affiliation || "",
+                institution_custom_name: form.institution_custom_name || null,
+                institution_type: form.institution_type || null,
+              }}
+              onChange={(val) =>
+                setForm((prev) => ({
+                  ...prev,
+                  institution_id: val.institution_id,
+                  institution_affiliation: val.institution_name,
+                  institution_custom_name: val.institution_custom_name,
+                  institution_type: val.institution_type,
+                }))
+              }
+            />
+            <div>
+              <Label htmlFor="professional_position">Cargo / Função</Label>
+              <Input id="professional_position" value={form.professional_position || ""} onChange={(e) => set("professional_position", e.target.value)} placeholder="Professor, pesquisador..." className="mt-1" />
             </div>
             <div>
               <CnpqAreaSelector

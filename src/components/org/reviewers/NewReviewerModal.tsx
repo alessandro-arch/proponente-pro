@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import CnpqAreaSelector from "@/components/CnpqAreaSelector";
+import InstitutionSelector from "@/components/InstitutionSelector";
 
 interface Props {
   open: boolean;
@@ -25,11 +26,16 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
   const [form, setForm] = useState({
     full_name: "",
     email: "",
-    institution: "",
     lattes_url: "",
     orcid: "",
     bio: "",
     sendInvite: true,
+  });
+  const [institution, setInstitution] = useState({
+    institution_id: null as string | null,
+    institution_name: "",
+    institution_custom_name: null as string | null,
+    institution_type: null as string | null,
   });
   const [areas, setAreas] = useState<{ code: string; name: string }[]>([]);
   const [currentArea, setCurrentArea] = useState<string | null>(null);
@@ -37,8 +43,8 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
   const [keywordInput, setKeywordInput] = useState("");
 
   const resetForm = () => {
-    setForm({ full_name: "", email: "", institution: "", lattes_url: "", orcid: "", bio: "", sendInvite: true });
-    setAreas([]);
+    setForm({ full_name: "", email: "", lattes_url: "", orcid: "", bio: "", sendInvite: true });
+    setInstitution({ institution_id: null, institution_name: "", institution_custom_name: null, institution_type: null });
     setKeywords([]);
     setKeywordInput("");
     setCurrentArea(null);
@@ -74,7 +80,10 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
           org_id: orgId,
           full_name: form.full_name.trim(),
           email,
-          institution: form.institution.trim(),
+          institution: institution.institution_name.trim(),
+          institution_id: institution.institution_id || null,
+          institution_custom_name: institution.institution_custom_name || null,
+          institution_type: institution.institution_type || null,
           areas: areas as any,
           keywords: keywords.length > 0 ? keywords : null,
           lattes_url: form.lattes_url || null,
@@ -124,7 +133,8 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
     onError: (err: any) => toast.error(err.message || "Erro ao cadastrar avaliador."),
   });
 
-  const isValid = form.full_name.trim() && form.email.trim() && form.institution.trim() && areas.length > 0;
+  const institutionValid = !!institution.institution_id || (!!institution.institution_custom_name?.trim() && !!institution.institution_type);
+  const isValid = form.full_name.trim() && form.email.trim() && institutionValid && areas.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -146,10 +156,12 @@ const NewReviewerModal = ({ open, onOpenChange, orgId }: Props) => {
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Instituição de vínculo <span className="text-destructive">*</span></Label>
-            <Input value={form.institution} onChange={(e) => setForm({ ...form, institution: e.target.value })} />
-          </div>
+          <InstitutionSelector
+            label="Instituição de vínculo"
+            required
+            value={institution}
+            onChange={setInstitution}
+          />
 
           <div className="space-y-1.5">
             <Label>Áreas do Conhecimento (CNPq) <span className="text-destructive">*</span></Label>
