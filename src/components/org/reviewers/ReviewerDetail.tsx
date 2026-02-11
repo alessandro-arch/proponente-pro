@@ -31,6 +31,23 @@ const AUDIT_LABELS: Record<string, string> = {
   REVIEWER_STATUS_CHANGED: "Status alterado",
 };
 
+function getAreaLabel(a: any): string {
+  if (typeof a === "string") return a;
+  return a?.name || a?.code || "";
+}
+
+function getPrimaryArea(areas: any[]): string | null {
+  const primary = areas.find((a: any) => a?.role === "primary");
+  if (primary) return getAreaLabel(primary);
+  return areas.length > 0 ? getAreaLabel(areas[0]) : null;
+}
+
+function getSecondaryArea(areas: any[]): string | null {
+  const secondary = areas.find((a: any) => a?.role === "secondary");
+  if (secondary) return getAreaLabel(secondary);
+  return areas.length > 1 ? getAreaLabel(areas[1]) : null;
+}
+
 const ReviewerDetail = ({ reviewerId, orgId, onBack }: Props) => {
   const queryClient = useQueryClient();
 
@@ -115,6 +132,8 @@ const ReviewerDetail = ({ reviewerId, orgId, onBack }: Props) => {
   }
 
   const areas = Array.isArray(reviewer.areas) ? reviewer.areas : [];
+  const primaryArea = getPrimaryArea(areas);
+  const secondaryArea = getSecondaryArea(areas);
 
   return (
     <div className="space-y-6">
@@ -184,14 +203,18 @@ const ReviewerDetail = ({ reviewerId, orgId, onBack }: Props) => {
             <Separator />
 
             <div>
-              <p className="text-xs text-muted-foreground mb-2">Áreas do Conhecimento</p>
-              <div className="flex flex-wrap gap-1.5">
-                {areas.map((a: any, i: number) => (
-                  <Badge key={i} variant="secondary" className="text-xs">
-                    {typeof a === "string" ? a : a.name || a.code}
-                  </Badge>
-                ))}
-                {areas.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma área cadastrada.</p>}
+              <p className="text-xs text-muted-foreground mb-2">Áreas do Conhecimento (CNPq)</p>
+              <div className="space-y-2">
+                <div className="flex items-start gap-2">
+                  <Badge variant="default" className="text-[10px] shrink-0 mt-0.5">Principal</Badge>
+                  <span className="text-sm">{primaryArea || "Nenhuma área cadastrada."}</span>
+                </div>
+                {secondaryArea && (
+                  <div className="flex items-start gap-2">
+                    <Badge variant="secondary" className="text-[10px] shrink-0 mt-0.5">Secundária</Badge>
+                    <span className="text-sm">{secondaryArea}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -238,7 +261,6 @@ const ReviewerDetail = ({ reviewerId, orgId, onBack }: Props) => {
 
         {/* Sidebar */}
         <div className="space-y-6">
-          {/* Conflitos de Interesse */}
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
@@ -251,7 +273,6 @@ const ReviewerDetail = ({ reviewerId, orgId, onBack }: Props) => {
             </CardContent>
           </Card>
 
-          {/* Auditoria */}
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Auditoria</CardTitle>

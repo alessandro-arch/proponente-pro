@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Loader2, Plus, Search, Eye, MoreVertical, Ban, RefreshCw, UserCheck, Trash2 } from "lucide-react";
+import { Loader2, Plus, Search, Eye, MoreVertical, Ban, RefreshCw, UserCheck, Trash2, Filter, X } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -34,16 +34,27 @@ const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | 
   DISABLED: "outline",
 };
 
-function formatArea(a: any): string {
+function getAreaLabel(a: any): string {
   if (typeof a === "string") return a;
-  if (a?.name) return a.name;
-  if (a?.code) return a.code;
-  return "";
+  return a?.name || a?.code || "";
+}
+
+function getPrimaryArea(areas: any[]): string | null {
+  const primary = areas.find((a: any) => a?.role === "primary");
+  if (primary) return getAreaLabel(primary);
+  return areas.length > 0 ? getAreaLabel(areas[0]) : null;
+}
+
+function getSecondaryArea(areas: any[]): string | null {
+  const secondary = areas.find((a: any) => a?.role === "secondary");
+  if (secondary) return getAreaLabel(secondary);
+  return areas.length > 1 ? getAreaLabel(areas[1]) : null;
 }
 
 const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [areaFilter, setAreaFilter] = useState<string[]>([]);
   const [showNewModal, setShowNewModal] = useState(false);
   const queryClient = useQueryClient();
 
@@ -61,6 +72,25 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
       return data;
     },
   });
+
+  // Extract unique areas from all reviewers for filter options
+  const allAreas = (() => {
+    const set = new Map<string, string>();
+    reviewers?.forEach((r) => {
+      const areas: any[] = Array.isArray(r.areas) ? r.areas : [];
+      areas.forEach((a: any) => {
+        const label = getAreaLabel(a);
+        if (label) set.set(label, label);
+      });
+    });
+    return Array.from(set.values()).sort();
+  })();
+
+  const toggleAreaFilter = (area: string) => {
+    setAreaFilter((prev) =>
+      prev.includes(area) ? prev.filter((a) => a !== area) : [...prev, area]
+    );
+  };
 
   const toggleStatusMutation = useMutation({
     mutationFn: async ({ id, newStatus }: { id: string; newStatus: string }) => {
@@ -98,13 +128,22 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
   });
 
   const filtered = reviewers?.filter((r) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      r.full_name.toLowerCase().includes(q) ||
-      r.email.toLowerCase().includes(q) ||
-      r.institution.toLowerCase().includes(q)
-    );
+    // Text search
+    if (search) {
+      const q = search.toLowerCase();
+      const match = r.full_name.toLowerCase().includes(q) ||
+        r.email.toLowerCase().includes(q) ||
+        r.institution.toLowerCase().includes(q);
+      if (!match) return false;
+    }
+    // Area filter
+    if (areaFilter.length > 0) {
+      const areas: any[] = Array.isArray(r.areas) ? r.areas : [];
+      const reviewerAreas = areas.map((a: any) => getAreaLabel(a));
+      const hasMatch = areaFilter.some((f) => reviewerAreas.includes(f));
+      if (!hasMatch) return false;
+    }
+    return true;
   });
 
   return (
@@ -120,8 +159,8 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
           </Button>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-sm">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative flex-1 max-w-sm min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder="Buscar por nome, e-mail ou instituição..."
@@ -131,7 +170,7 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
             />
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-[160px]">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
@@ -143,7 +182,60 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
               <SelectItem value="DISABLED">Desativado</SelectItem>
             </SelectContent>
           </Select>
+
+          {/* Area filter dropdown */}
+          {allAreas.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5">
+                  <Filter className="w-3.5 h-3.5" />
+                  Área
+                  {areaFilter.length > 0 && (
+                    <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">
+                      {areaFilter.length}
+                    </Badge>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-72 max-h-64 overflow-y-auto">
+                {allAreas.map((area) => (
+                  <DropdownMenuItem
+                    key={area}
+                    onClick={(e) => { e.preventDefault(); toggleAreaFilter(area); }}
+                    className="gap-2 text-xs"
+                  >
+                    <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${areaFilter.includes(area) ? "bg-primary border-primary" : "border-border"}`}>
+                      {areaFilter.includes(area) && <span className="text-primary-foreground text-[9px]">✓</span>}
+                    </div>
+                    <span className="truncate">{area}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
+
+        {/* Active area filters */}
+        {areaFilter.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs text-muted-foreground">Filtros:</span>
+            {areaFilter.map((a) => (
+              <Badge key={a} variant="secondary" className="gap-1 text-xs">
+                {a}
+                <button type="button" onClick={() => toggleAreaFilter(a)}>
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            ))}
+            <button
+              type="button"
+              onClick={() => setAreaFilter([])}
+              className="text-xs text-muted-foreground hover:text-foreground underline"
+            >
+              Limpar
+            </button>
+          </div>
+        )}
 
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
@@ -151,7 +243,7 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
           </div>
         ) : !filtered || filtered.length === 0 ? (
           <div className="text-center py-12 border border-dashed border-border rounded-lg">
-            <p className="text-muted-foreground">Nenhum avaliador cadastrado.</p>
+            <p className="text-muted-foreground">Nenhum avaliador encontrado.</p>
             <Button variant="outline" className="mt-4" onClick={() => setShowNewModal(true)}>
               <Plus className="w-4 h-4 mr-2" /> Cadastrar primeiro avaliador
             </Button>
@@ -172,8 +264,8 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
             <div className="divide-y divide-border">
               {filtered.map((r) => {
                 const areas: any[] = Array.isArray(r.areas) ? r.areas : [];
-                const primaryArea = areas.length > 0 ? formatArea(areas[0]) : null;
-                const extraCount = areas.length > 1 ? areas.length - 1 : 0;
+                const primary = getPrimaryArea(areas);
+                const secondary = getSecondaryArea(areas);
 
                 return (
                   <div
@@ -198,27 +290,26 @@ const ReviewersList = ({ orgId, onViewReviewer }: Props) => {
 
                     {/* Area */}
                     <div className="min-w-0 hidden md:flex items-center gap-1.5">
-                      {primaryArea ? (
+                      {primary ? (
                         <>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span className="text-xs text-muted-foreground truncate">{primaryArea}</span>
+                              <span className="text-xs text-muted-foreground truncate">{primary}</span>
                             </TooltipTrigger>
-                            <TooltipContent side="top" className="max-w-xs">{primaryArea}</TooltipContent>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p className="text-xs"><strong>Principal:</strong> {primary}</p>
+                              {secondary && <p className="text-xs mt-1"><strong>Secundária:</strong> {secondary}</p>}
+                            </TooltipContent>
                           </Tooltip>
-                          {extraCount > 0 && (
+                          {secondary && (
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <span className="text-[10px] text-primary/70 whitespace-nowrap cursor-default font-medium">
-                                  +{extraCount}
+                                  +1
                                 </span>
                               </TooltipTrigger>
                               <TooltipContent side="top" className="max-w-xs">
-                                <ul className="space-y-0.5 text-xs">
-                                  {areas.slice(1).map((a, i) => (
-                                    <li key={i}>{formatArea(a)}</li>
-                                  ))}
-                                </ul>
+                                <p className="text-xs">{secondary}</p>
                               </TooltipContent>
                             </Tooltip>
                           )}
