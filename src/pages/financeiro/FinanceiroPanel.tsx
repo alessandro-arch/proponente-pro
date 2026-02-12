@@ -45,7 +45,7 @@ const FinanceiroPanel = () => {
               <Landmark className="w-4 h-4 text-primary-foreground" />
             </div>
             <div>
-              <p className="text-sm font-bold font-heading text-foreground">SisConnecta</p>
+              <p className="text-sm font-bold font-heading text-foreground">ProjetoGO</p>
               <p className="text-xs text-muted-foreground">Gestão Financeira</p>
             </div>
           </div>

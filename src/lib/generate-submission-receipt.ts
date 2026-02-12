@@ -49,7 +49,7 @@ export function generateSubmissionReceipt(data: ReceiptData) {
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(80);
-  doc.text("Plataforma SisConnecta — Comprovante Oficial de Protocolo", PW / 2, y, { align: "center" });
+  doc.text("Plataforma ProjetoGO — Comprovante Oficial de Protocolo", PW / 2, y, { align: "center" });
   y += 10;
 
   // === SEPARATOR ===
@@ -140,7 +140,7 @@ export function generateSubmissionReceipt(data: ReceiptData) {
   y += 7;
 
   const legalTexts = [
-    `Certificamos que a proposta identificada pelo protocolo ${data.protocol || "N/A"} foi recebida com sucesso pela plataforma SisConnecta na data e horário indicados acima.`,
+    `Certificamos que a proposta identificada pelo protocolo ${data.protocol || "N/A"} foi recebida com sucesso pela plataforma ProjetoGO na data e horário indicados acima.`,
     `Este documento serve como comprovante oficial de submissão da proposta ao edital "${data.editalTitle}", devendo ser guardado pelo proponente para fins de registro e eventual consulta futura.`,
     `A submissão da proposta implica na aceitação integral das condições estabelecidas no edital, incluindo prazos, critérios de avaliação e demais disposições regulamentares.`,
     `O conteúdo da proposta submetida não poderá ser alterado após o encerramento do prazo de submissão, salvo disposição expressa em contrário prevista no edital.`,
@@ -182,7 +182,7 @@ export function generateSubmissionReceipt(data: ReceiptData) {
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(80);
-  doc.text("Plataforma SisConnecta", PW / 2, y, { align: "center" });
+  doc.text("Plataforma ProjetoGO", PW / 2, y, { align: "center" });
   y += 4;
   doc.text("Sistema de Gestão de Editais e Projetos", PW / 2, y, { align: "center" });
 

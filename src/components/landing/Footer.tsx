@@ -10,11 +10,11 @@ const Footer = () => {
               <FileText className="w-5 h-5 text-secondary-foreground" />
             </div>
             <span className="text-lg font-heading font-bold text-background">
-              SisConnecta Editais
+              ProjetoGO
             </span>
           </div>
           <p className="text-muted-foreground text-sm">
-            © {new Date().getFullYear()} SisConnecta Editais. Todos os direitos reservados.
+            © {new Date().getFullYear()} ProjetoGO. Todos os direitos reservados.
           </p>
         </div>
       </div>
