@@ -335,7 +335,7 @@ const SubmissionForm = ({ editalId, editalTitle, editalStartDate, editalEndDate,
         </div>
         ${sectionsHtml}
         <div class="footer">
-          <p>Documento gerado automaticamente pela plataforma SisConnecta</p>
+          <p>Documento gerado automaticamente pela plataforma ProjetoGO</p>
           <p>ID: ${(submission as any).id}</p>
         </div>
       </body></html>`);

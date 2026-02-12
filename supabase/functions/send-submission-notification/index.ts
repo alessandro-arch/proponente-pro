@@ -57,7 +57,7 @@ const handler = async (req: Request): Promise<Response> => {
     const viewUrl = `${appUrl}/proponente`;
 
     const emailResponse = await resend.emails.send({
-      from: "SisConnecta <onboarding@resend.dev>",
+      from: "ProjetoGO <onboarding@resend.dev>",
       to: [recipientEmail],
       subject: `Proposta submetida com sucesso — Protocolo ${protocol}`,
       html: `
@@ -120,7 +120,7 @@ const handler = async (req: Request): Promise<Response> => {
               </div>
             </div>
             <div class="footer">
-              <p>Este é um email automático do SisConnecta Editais. Não responda a este email.</p>
+              <p>Este é um email automático do ProjetoGO. Não responda a este email.</p>
               <p>ID da submissão: ${submissionId}</p>
             </div>
           </div>

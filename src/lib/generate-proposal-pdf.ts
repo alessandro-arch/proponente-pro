@@ -192,7 +192,7 @@ function drawFooter(doc: jsPDF, pageNum: number, submissionId: string) {
   doc.setDrawColor(200);
   doc.setLineWidth(0.2);
   doc.line(MARGIN_LEFT, PAGE_HEIGHT - 18, PAGE_WIDTH - MARGIN_RIGHT, PAGE_HEIGHT - 18);
-  doc.text("Documento gerado automaticamente pela plataforma SisConnecta", PAGE_WIDTH / 2, PAGE_HEIGHT - 14, { align: "center" });
+  doc.text("Documento gerado automaticamente pela plataforma ProjetoGO", PAGE_WIDTH / 2, PAGE_HEIGHT - 14, { align: "center" });
   doc.text(`ID: ${submissionId}  |  Página ${pageNum}`, PAGE_WIDTH / 2, PAGE_HEIGHT - 10, { align: "center" });
   doc.setTextColor(0);
 }

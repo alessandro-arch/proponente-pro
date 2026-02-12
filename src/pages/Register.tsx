@@ -59,7 +59,7 @@ const Register = () => {
               <div className="w-10 h-10 rounded-lg gradient-secondary flex items-center justify-center">
                 <FileText className="w-5 h-5 text-secondary-foreground" />
               </div>
-              <h1 className="text-2xl font-bold font-heading text-foreground">SisConnecta Editais</h1>
+              <h1 className="text-2xl font-bold font-heading text-foreground">ProjetoGO</h1>
             </div>
 
             <h2 className="text-xl font-semibold text-foreground mb-2">Cadastro de Proponente</h2>

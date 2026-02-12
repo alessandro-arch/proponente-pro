@@ -166,7 +166,7 @@ const ReviewerInvitePage = () => {
           </div>
           <CardTitle>Convite para Avaliador</CardTitle>
           <CardDescription>
-            Você foi convidado(a) para atuar como avaliador(a) no SisConnecta.
+            Você foi convidado(a) para atuar como avaliador(a) no ProjetoGO.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">

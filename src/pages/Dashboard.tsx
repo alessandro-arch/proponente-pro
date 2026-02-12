@@ -30,7 +30,7 @@ const Dashboard = () => {
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="text-center p-8 max-w-md space-y-4">
         <h1 className="text-2xl font-bold font-heading text-foreground">
-          Bem-vindo ao SisConnecta Editais
+          Bem-vindo ao ProjetoGO
         </h1>
 
         {profile && !profile.profile_completed && (

@@ -14,7 +14,7 @@ const HeroSection = () => {
             <div className="w-8 h-8 rounded-lg bg-primary-foreground/10 flex items-center justify-center">
               <FileText className="w-4 h-4 text-secondary" />
             </div>
-            <span className="text-sm font-bold font-heading text-primary-foreground">SisConnecta Editais</span>
+            <span className="text-sm font-bold font-heading text-primary-foreground">ProjetoGO</span>
           </div>
           <Button
             variant="ghost"
@@ -49,7 +49,7 @@ const HeroSection = () => {
           </h1>
 
           <p className="text-lg md:text-xl text-primary-foreground/70 mb-10 leading-relaxed animate-fade-up" style={{ animationDelay: "100ms" }}>
-            SisConnecta Editais simplifica a publicação de editais, recebimento de propostas 
+            ProjetoGO simplifica a publicação de editais, recebimento de propostas 
             e acompanhamento de todo o processo — tudo em uma única plataforma.
           </p>
 
