@@ -1231,6 +1231,7 @@ export default function SchemaDoc() {
   const [selectedTable, setSelectedTable] = useState<string>(TABLES[0].name);
   const [selectedFn, setSelectedFn] = useState<string>(DB_FUNCTIONS[0].name);
   const [selectedEdge, setSelectedEdge] = useState<string>(EDGE_FUNCTIONS[0].name);
+  const [selectedEnum, setSelectedEnum] = useState<string>(ENUMS[0]?.name ?? "");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expandedSections, setExpandedSections] = useState<Record<SectionType, boolean>>({
     tables: true, enums: false, functions: false, views: false, edge_functions: false,
@@ -1295,7 +1296,10 @@ export default function SchemaDoc() {
                         </button>
                       ))}
                       {key === "enums" && ENUMS.map(e => (
-                        <div key={e.name} className="text-xs px-3 py-1.5 text-muted-foreground">{e.name}</div>
+                        <button key={e.name} onClick={() => { setSection("enums"); setSelectedEnum(e.name); }}
+                          className={`w-full text-left text-xs px-3 py-1.5 rounded transition-colors truncate ${selectedEnum === e.name && section === "enums" ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted text-muted-foreground"}`}>
+                          {e.name}
+                        </button>
                       ))}
                       {key === "views" && VIEWS.map(v => (
                         <div key={v.name} className="text-xs px-3 py-1.5 text-muted-foreground">{v.name}</div>
@@ -1317,7 +1321,7 @@ export default function SchemaDoc() {
           </Button>
           <h2 className="font-semibold text-sm">
             {section === "tables" && `Tabela: ${selectedTable}`}
-            {section === "enums" && "Enumerações (Enums)"}
+            {section === "enums" && `Enum: ${selectedEnum}`}
             {section === "functions" && `Função: ${selectedFn}`}
             {section === "views" && "Views"}
             {section === "edge_functions" && `Edge Function: ${selectedEdge}`}
@@ -1329,18 +1333,26 @@ export default function SchemaDoc() {
             <TableDetail table={TABLES.find(t => t.name === selectedTable)!} />
           )}
 
-          {section === "enums" && (
-            <div className="space-y-6">
-              <h2 className="text-xl font-bold font-heading flex items-center gap-2">
-                <Layers className="h-5 w-5 text-primary" /> Enumerações
-              </h2>
-              {ENUMS.map(e => (
-                <div key={e.name}>
-                  <CodeBlock code={`CREATE TYPE public.${e.name} AS ENUM (\n  ${e.values.map(v => `'${v}'`).join(",\n  ")}\n);`} label={e.name} />
+          {section === "enums" && (() => {
+            const enumItem = ENUMS.find(e => e.name === selectedEnum);
+            if (!enumItem) return null;
+            return (
+              <div className="space-y-6">
+                <h2 className="text-xl font-bold font-heading flex items-center gap-2">
+                  <Layers className="h-5 w-5 text-primary" /> {enumItem.name}
+                </h2>
+                <CodeBlock code={`CREATE TYPE public.${enumItem.name} AS ENUM (\n  ${enumItem.values.map(v => `'${v}'`).join(",\n  ")}\n);`} label={enumItem.name} />
+                <div className="mt-4">
+                  <h3 className="text-sm font-semibold mb-2">Valores ({enumItem.values.length})</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {enumItem.values.map(v => (
+                      <span key={v} className="px-2 py-1 bg-muted rounded text-xs font-mono">{v}</span>
+                    ))}
+                  </div>
                 </div>
-              ))}
-            </div>
-          )}
+              </div>
+            );
+          })()}
 
           {section === "functions" && (
             <div className="space-y-4">
