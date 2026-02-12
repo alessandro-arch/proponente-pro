@@ -1096,9 +1096,83 @@ END;
 $$;` },
   { name: "fn_audit_trigger", definition: `CREATE OR REPLACE FUNCTION public.fn_audit_trigger()
  RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
--- Captures INSERT/UPDATE/DELETE on any table and writes to audit_logs.
--- Automatically extracts organization_id via direct column, edital_id, or proposal_id.
--- Records old/new status on UPDATE.` },
+AS $$
+DECLARE
+  _action text;
+  _entity_id uuid;
+  _org_id uuid;
+  _user_id uuid;
+  _user_role text;
+  _metadata jsonb;
+BEGIN
+  _action := TG_ARGV[0] || '.' || lower(TG_OP);
+
+  IF TG_OP = 'DELETE' THEN _entity_id := OLD.id;
+  ELSE _entity_id := NEW.id; END IF;
+
+  _user_id := auth.uid();
+
+  IF TG_OP = 'DELETE' THEN
+    BEGIN _org_id := OLD.organization_id; EXCEPTION WHEN undefined_column THEN _org_id := NULL; END;
+  ELSE
+    BEGIN _org_id := NEW.organization_id; EXCEPTION WHEN undefined_column THEN _org_id := NULL; END;
+  END IF;
+
+  IF _org_id IS NULL THEN
+    BEGIN
+      IF TG_OP = 'DELETE' THEN
+        SELECT e.organization_id INTO _org_id FROM editais e WHERE e.id = OLD.edital_id;
+      ELSE
+        SELECT e.organization_id INTO _org_id FROM editais e WHERE e.id = NEW.edital_id;
+      END IF;
+    EXCEPTION WHEN undefined_column THEN NULL;
+    END;
+  END IF;
+
+  IF _org_id IS NULL THEN
+    BEGIN
+      IF TG_OP = 'DELETE' THEN
+        SELECT p.organization_id INTO _org_id FROM proposals p WHERE p.id = OLD.proposal_id;
+      ELSE
+        SELECT p.organization_id INTO _org_id FROM proposals p WHERE p.id = NEW.proposal_id;
+      END IF;
+    EXCEPTION WHEN undefined_column THEN NULL;
+    END;
+  END IF;
+
+  IF _user_id IS NOT NULL THEN
+    SELECT role::text INTO _user_role FROM public.organization_members
+    WHERE user_id = _user_id AND organization_id = _org_id LIMIT 1;
+    IF _user_role IS NULL THEN
+      SELECT role::text INTO _user_role FROM public.user_roles
+      WHERE user_id = _user_id LIMIT 1;
+    END IF;
+  END IF;
+
+  _metadata := '{}'::jsonb;
+  IF TG_OP = 'UPDATE' THEN
+    _metadata := jsonb_build_object('operation', 'update');
+  ELSIF TG_OP = 'INSERT' THEN
+    _metadata := jsonb_build_object('operation', 'insert');
+  ELSIF TG_OP = 'DELETE' THEN
+    _metadata := jsonb_build_object('operation', 'delete');
+  END IF;
+
+  IF TG_OP = 'UPDATE' THEN
+    BEGIN
+      IF OLD.status IS DISTINCT FROM NEW.status THEN
+        _metadata := _metadata || jsonb_build_object('old_status', OLD.status::text, 'new_status', NEW.status::text);
+      END IF;
+    EXCEPTION WHEN undefined_column THEN NULL;
+    END;
+  END IF;
+
+  INSERT INTO public.audit_logs (user_id, organization_id, entity, entity_id, action, metadata_json, user_role)
+  VALUES (_user_id, _org_id, TG_ARGV[0], _entity_id, _action, _metadata, _user_role);
+
+  IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+END;
+$$;` },
   { name: "prevent_audit_log_modification", definition: `CREATE OR REPLACE FUNCTION public.prevent_audit_log_modification()
  RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
 AS $$
