@@ -1310,16 +1310,864 @@ FROM proposals p
 
 // ═══ EDGE FUNCTIONS ═══
 const EDGE_FUNCTIONS: EdgeFunction[] = [
-  { name: "accept-reviewer-code", code: "Aceita convite de avaliador via código alfanumérico. Valida código, cria user (auth.admin.createUser), atualiza profiles, organization_members, user_roles, reviewer_profiles. Marca convite como usado." },
-  { name: "accept-reviewer-invite", code: "Aceita convite de avaliador via token (link de email). Mesmo fluxo: valida token_hash, cria usuário, popula perfil, roles e reviewer_profiles." },
-  { name: "export-audit-logs", code: "Exporta logs de auditoria em CSV ou HTML. Requer autenticação + role org_admin/edital_manager/icca_admin. Busca até 5000 registros com filtro por entidade." },
-  { name: "generate-review-draft", code: "Gera minuta de parecer técnico usando IA (Lovable AI Gateway - gemini-3-flash-preview). Recebe scores, recomendação, conteúdo da proposta. Retorna stream SSE." },
-  { name: "seed-cnpq-areas", code: "Popula tabela cnpq_areas com a árvore oficial de áreas do conhecimento do CNPq (9 grandes áreas + sub-áreas). ~500 registros." },
-  { name: "seed-institutions", code: "Importa instituições do CSV do e-MEC para tabela institutions. Parsing de CSV, inserção em batch de 500." },
-  { name: "send-reviewer-invite", code: "Envia e-mail de convite para avaliador via Resend. Gera token único, salva token_hash no invite, cria audit log. Template HTML com botão + código." },
-  { name: "send-submission-notification", code: "Envia e-mail de confirmação de submissão via Resend. Inclui protocolo, título do edital, data. Template HTML estilizado." },
-  { name: "validate-reviewer-code", code: "Valida código de convite alfanumérico. Rate-limit por IP (5 tentativas/min). Retorna dados do convite + organização sem consumir o convite." },
-  { name: "validate-reviewer-invite", code: "Valida token de convite (link). Hash SHA-256, verifica expiração. Retorna dados do avaliador sem consumir o convite." },
+  { name: "accept-reviewer-code", code: `import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.3";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+const handler = async (req: Request): Promise<Response> => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  try {
+    const { invite_code, password, cpf, full_name, institution, institution_id, institution_custom_name, institution_type, areas, keywords, lattes_url } = await req.json();
+    if (!invite_code || !password) throw new Error("Missing invite_code or password");
+    if (password.length < 6) throw new Error("Password must be at least 6 characters");
+    if (!cpf || cpf.length !== 11) throw new Error("CPF is required (11 digits)");
+    if (!full_name?.trim()) throw new Error("Full name is required");
+
+    const code = invite_code.toUpperCase().trim();
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+    // Validate invite
+    const { data: invite, error: inviteErr } = await adminClient
+      .from("reviewer_invites").select("*").eq("invite_code", code).is("used_at", null).single();
+
+    if (inviteErr || !invite) {
+      return new Response(JSON.stringify({ error: "Código não encontrado ou já utilizado." }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
+    }
+    if (new Date(invite.expires_at) < new Date()) {
+      return new Response(JSON.stringify({ error: "Este convite expirou." }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
+    }
+
+    // Hash CPF
+    const cpfHash = await hashValue(cpf);
+    const cpfLast4 = cpf.slice(-4);
+
+    // Check if user already exists
+    const { data: existingUsers } = await adminClient.auth.admin.listUsers();
+    const email = invite.email;
+    const existingUser = existingUsers?.users?.find(u => u.email === email);
+
+    let userId: string;
+    if (existingUser) {
+      userId = existingUser.id;
+    } else {
+      const { data: newUser, error: createErr } = await adminClient.auth.admin.createUser({
+        email, password, email_confirm: true,
+        user_metadata: { full_name: full_name.trim() },
+      });
+      if (createErr) throw createErr;
+      userId = newUser.user.id;
+    }
+
+    // Update profile with personal data + cpf_hash
+    await adminClient.from("profiles").update({
+      full_name: full_name.trim(),
+      institution_id: institution_id || null,
+      institution_custom_name: institution_custom_name || null,
+      institution_type: institution_type || null,
+      lattes_url: lattes_url || null,
+      cpf: cpf,
+      cpf_hash: cpfHash,
+    }).eq("user_id", userId);
+
+    // Add reviewer role in organization_members
+    await adminClient.from("organization_members").upsert({
+      user_id: userId, organization_id: invite.org_id, role: "reviewer", status: "ativo",
+    }, { onConflict: "user_id,organization_id" }).select();
+
+    // Add to user_roles
+    await adminClient.from("user_roles").upsert({
+      user_id: userId, role: "reviewer",
+    }, { onConflict: "user_id,role" }).select();
+
+    // Create reviewer_profiles entry
+    await adminClient.from("reviewer_profiles").upsert({
+      user_id: userId,
+      org_id: invite.org_id,
+      areas: areas && areas.length > 0 ? areas : (invite.areas || []),
+      keywords: keywords && keywords.length > 0 ? keywords : (invite.keywords || []),
+      orcid: invite.orcid || null,
+      bio: null,
+      accepted_at: new Date().toISOString(),
+      first_terms_accepted_at: new Date().toISOString(),
+      terms_version: "v1",
+    }, { onConflict: "user_id,org_id" }).select();
+
+    // Mark invite as used
+    await adminClient.from("reviewer_invites").update({ used_at: new Date().toISOString() }).eq("id", invite.id);
+
+    // Audit log
+    await adminClient.from("audit_logs").insert({
+      user_id: userId, organization_id: invite.org_id,
+      entity: "reviewer", entity_id: userId,
+      action: "REVIEWER_TERMS_ACCEPTED",
+      metadata_json: { email, method: "invite_code", terms_version: "v1", lgpd_accepted: true },
+    });
+
+    return new Response(JSON.stringify({ success: true }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
+  } catch (error: any) {
+    console.error("Error accepting invite by code:", error);
+    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } });
+  }
+};
+
+async function hashValue(value: string): Promise<string> {
+  const data = new TextEncoder().encode(value);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+serve(handler);` },
+  { name: "accept-reviewer-invite", code: `import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.3";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+const handler = async (req: Request): Promise<Response> => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  try {
+    const { token, password, cpf } = await req.json();
+    if (!token || !password) throw new Error("Missing token or password");
+    if (password.length < 6) throw new Error("Password must be at least 6 characters");
+    if (!cpf || cpf.length !== 11) throw new Error("CPF is required (11 digits)");
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+    const tokenHash = await hashToken(token);
+
+    // Validate invite
+    const { data: invite, error: inviteErr } = await adminClient
+      .from("reviewer_invites").select("*").eq("token_hash", tokenHash).is("used_at", null).single();
+
+    if (inviteErr || !invite) {
+      return new Response(JSON.stringify({ error: "Convite não encontrado ou já utilizado." }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
+    }
+    if (new Date(invite.expires_at) < new Date()) {
+      return new Response(JSON.stringify({ error: "Este convite expirou." }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
+    }
+
+    // Hash CPF
+    const cpfHash = await hashToken(cpf);
+    const cpfLast4 = cpf.slice(-4);
+
+    // Use staging data from invite
+    const fullName = invite.full_name || invite.email;
+
+    // Check if user already exists
+    const { data: existingUsers } = await adminClient.auth.admin.listUsers();
+    const existingUser = existingUsers?.users?.find(u => u.email === invite.email);
+
+    let userId: string;
+    if (existingUser) {
+      userId = existingUser.id;
+    } else {
+      const { data: newUser, error: createErr } = await adminClient.auth.admin.createUser({
+        email: invite.email, password, email_confirm: true,
+        user_metadata: { full_name: fullName },
+      });
+      if (createErr) throw createErr;
+      userId = newUser.user.id;
+    }
+
+    // Update profile with personal data + cpf_hash
+    await adminClient.from("profiles").update({
+      full_name: fullName,
+      institution_id: invite.institution_id || null,
+      institution_custom_name: invite.institution_custom_name || null,
+      institution_type: invite.institution_type || null,
+      lattes_url: invite.lattes_url || null,
+      cpf: cpf,
+      cpf_hash: cpfHash,
+    }).eq("user_id", userId);
+
+    // Add reviewer role in organization_members
+    await adminClient.from("organization_members").upsert({
+      user_id: userId, organization_id: invite.org_id, role: "reviewer", status: "ativo",
+    }, { onConflict: "user_id,organization_id" }).select();
+
+    // Add to user_roles
+    await adminClient.from("user_roles").upsert({
+      user_id: userId, role: "reviewer",
+    }, { onConflict: "user_id,role" }).select();
+
+    // Create reviewer_profiles entry
+    await adminClient.from("reviewer_profiles").upsert({
+      user_id: userId,
+      org_id: invite.org_id,
+      areas: invite.areas || [],
+      keywords: invite.keywords || [],
+      orcid: invite.orcid || null,
+      accepted_at: new Date().toISOString(),
+      first_terms_accepted_at: new Date().toISOString(),
+      terms_version: "v1",
+    }, { onConflict: "user_id,org_id" }).select();
+
+    // Mark invite as used
+    await adminClient.from("reviewer_invites").update({ used_at: new Date().toISOString() }).eq("id", invite.id);
+
+    // Audit log
+    await adminClient.from("audit_logs").insert({
+      user_id: userId, organization_id: invite.org_id,
+      entity: "reviewer", entity_id: userId,
+      action: "REVIEWER_TERMS_ACCEPTED",
+      metadata_json: { email: invite.email },
+    });
+
+    return new Response(JSON.stringify({ success: true }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
+  } catch (error: any) {
+    console.error("Error accepting invite:", error);
+    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } });
+  }
+};
+
+async function hashToken(token: string): Promise<string> {
+  const data = new TextEncoder().encode(token);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+serve(handler);` },
+  { name: "export-audit-logs", code: `import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    // Get user token
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Não autenticado" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Verify user with anon client
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error: authError } = await userClient.auth.getUser();
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Não autenticado" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { organization_id, format, entity_filter } = await req.json();
+    if (!organization_id) {
+      return new Response(JSON.stringify({ error: "organization_id obrigatório" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Verify user is org staff
+    const adminClient = createClient(supabaseUrl, supabaseKey);
+    const { data: membership } = await adminClient
+      .from("organization_members").select("role")
+      .eq("user_id", user.id).eq("organization_id", organization_id).single();
+
+    const { data: globalRole } = await adminClient
+      .from("user_roles").select("role")
+      .eq("user_id", user.id).eq("role", "icca_admin").maybeSingle();
+
+    const isStaff = globalRole || (membership && ["org_admin", "edital_manager"].includes(membership.role));
+    if (!isStaff) {
+      return new Response(JSON.stringify({ error: "Sem permissão" }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Fetch logs
+    let query = adminClient.from("audit_logs").select("*")
+      .eq("organization_id", organization_id)
+      .order("created_at", { ascending: false }).limit(5000);
+
+    if (entity_filter) { query = query.eq("entity", entity_filter); }
+    const { data: logs, error: logsError } = await query;
+    if (logsError) throw logsError;
+
+    // ... formats as CSV or HTML report with ENTITY_LABELS and ROLE_LABELS mappings
+    // Returns Content-Disposition attachment for download
+
+    if (format === "csv") {
+      const header = "Data/Hora,Entidade,Ação,Papel,ID Entidade,Detalhes";
+      const rows = (logs || []).map((log: any) => {
+        const date = new Date(log.created_at).toLocaleString("pt-BR");
+        const entity = log.entity;
+        const action = log.action;
+        const role = log.user_role || "Sistema";
+        const entityId = log.entity_id || "";
+        const meta = log.metadata_json ? JSON.stringify(log.metadata_json) : "";
+        return \`"\${date}","\${entity}","\${action}","\${role}","\${entityId}","\${meta.replace(/"/g, '""')}"\`;
+      });
+      return new Response([header, ...rows].join("\\n"), {
+        headers: { ...corsHeaders, "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=audit-logs.csv" },
+      });
+    }
+
+    // format === "pdf" returns styled HTML table
+    return new Response(JSON.stringify({ error: "Formato inválido. Use 'csv' ou 'pdf'." }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});` },
+  { name: "generate-review-draft", code: `import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+interface ScoreInput {
+  criteriaName: string;
+  criteriaDescription: string | null;
+  maxScore: number;
+  weight: number;
+  score: number;
+  comment: string;
+}
+
+interface RequestBody {
+  scores: ScoreInput[];
+  recommendation: string;
+  overallScore: number;
+  knowledgeArea: string | null;
+  editalTitle: string;
+  proposalContent: Record<string, string> | null;
+}
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const { scores, recommendation, overallScore, knowledgeArea, editalTitle, proposalContent } =
+      (await req.json()) as RequestBody;
+
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+
+    const recommendationLabel: Record<string, string> = {
+      approved: "Aprovado",
+      approved_with_reservations: "Aprovado com ressalvas",
+      not_approved: "Não aprovado",
+    };
+
+    const criteriaBlock = scores
+      .map(s => \`- \${s.criteriaName} (peso \${s.weight}, máx \${s.maxScore}): nota \${s.score}\${s.comment ? \` — "\${s.comment}"\` : ""}\`)
+      .join("\\n");
+
+    const proposalBlock = proposalContent
+      ? Object.entries(proposalContent).map(([k, v]) => \`\${k}: \${String(v).substring(0, 500)}\`).join("\\n")
+      : "Conteúdo não disponível.";
+
+    const systemPrompt = \`Você é um especialista acadêmico brasileiro que redige pareceres técnicos...
+Regras: nunca mencionar nomes/instituições, usar código cego, linguagem formal acadêmica.
+Estrutura: Introdução, Análise por Critério, Considerações Finais, Recomendação (300-600 palavras).\`;
+
+    const userPrompt = \`Gere uma minuta de parecer para:
+Edital: \${editalTitle} | Área: \${knowledgeArea || "N/A"}
+Recomendação: \${recommendationLabel[recommendation] || recommendation}
+Nota final: \${overallScore}
+Critérios: \${criteriaBlock}
+Proposta: \${proposalBlock}\`;
+
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: \`Bearer \${LOVABLE_API_KEY}\`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
+        stream: true,
+      }),
+    });
+
+    if (!response.ok) {
+      if (response.status === 429) return new Response(JSON.stringify({ error: "Rate limit" }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      if (response.status === 402) return new Response(JSON.stringify({ error: "Créditos insuficientes" }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      throw new Error("AI gateway error: " + response.status);
+    }
+
+    return new Response(response.body, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
+  } catch (e) {
+    console.error("generate-review-draft error:", e);
+    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Erro desconhecido" }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});` },
+  { name: "seed-cnpq-areas", code: `import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+interface CnpqEntry { code: string; name: string; level: number; parent_code: string | null; full_path: string; }
+
+// Tabela oficial de Áreas do Conhecimento CNPq
+const GRANDE_AREAS: Record<string, string> = {
+  "10000003": "Ciências Exatas e da Terra",
+  "20000006": "Ciências Biológicas",
+  "30000009": "Engenharias",
+  "40000001": "Ciências da Saúde",
+  "50000005": "Ciências Agrárias",
+  "60000008": "Ciências Sociais Aplicadas",
+  "70000000": "Ciências Humanas",
+  "80000002": "Linguística, Letras e Artes",
+  "90000005": "Multidisciplinar",
+};
+
+// RAW_DATA: ~570 entradas no formato [code, name, parentCode]
+// Inclui todas as 9 grandes áreas, áreas, subáreas e especialidades
+// Exemplo: ["10100008", "Matemática", "10000003"], ["10101004", "Álgebra", "10100008"], ...
+const RAW_DATA: [string, string, string | null][] = [
+  // === GRANDE ÁREAS (9) ===
+  ["10000003", "Ciências Exatas e da Terra", null],
+  ["20000006", "Ciências Biológicas", null],
+  // ... (+ ~568 registros de áreas, subáreas e especialidades)
+  ["90500008", "Ciências Ambientais", "90000005"],
+];
+
+function determineLevel(code: string, parentCode: string | null): number {
+  if (!parentCode) return 1;
+  const parent = RAW_DATA.find(d => d[0] === parentCode);
+  if (!parent || !parent[2]) return 2;
+  const grandparent = RAW_DATA.find(d => d[0] === parent[2]);
+  if (!grandparent || !grandparent[2]) return 3;
+  return 4;
+}
+
+function buildFullPath(code: string): string {
+  const entry = RAW_DATA.find(d => d[0] === code);
+  if (!entry) return "";
+  if (!entry[2]) return entry[1];
+  return buildFullPath(entry[2]) + " > " + entry[1];
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  try {
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    const { count } = await supabase.from("cnpq_areas").select("*", { count: "exact", head: true });
+    if (count && count > 0) {
+      return new Response(JSON.stringify({ message: \`Already seeded with \${count} entries.\` }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    const entries: CnpqEntry[] = RAW_DATA.map(([code, name, parentCode]) => ({
+      code, name, level: determineLevel(code, parentCode), parent_code: parentCode, full_path: buildFullPath(code),
+    }));
+
+    const batchSize = 100;
+    let inserted = 0;
+    for (let i = 0; i < entries.length; i += batchSize) {
+      const batch = entries.slice(i, i + batchSize);
+      const { error } = await supabase.from("cnpq_areas").insert(batch);
+      if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      inserted += batch.length;
+    }
+
+    return new Response(JSON.stringify({ message: \`Successfully seeded \${inserted} CNPq areas.\` }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+});` },
+  { name: "seed-institutions", code: `import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+function parseCsvLine(line: string): string[] {
+  const fields: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (const ch of line) {
+    if (ch === '"') { inQuotes = !inQuotes; continue; }
+    if (ch === "," && !inQuotes) { fields.push(current); current = ""; continue; }
+    current += ch;
+  }
+  fields.push(current);
+  return fields;
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  try {
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    const { count } = await supabase.from("institutions").select("*", { count: "exact", head: true });
+    if (count && count > 0) {
+      return new Response(JSON.stringify({ success: true, message: "Already seeded", count }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { csvText } = await req.json();
+    if (!csvText) throw new Error("csvText is required");
+
+    const lines = csvText.split("\\n");
+    const rows: any[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      const fields = parseCsvLine(line);
+      const nome = fields[1]?.trim();
+      if (!nome) continue;
+      const sigla = fields[2]?.trim();
+      rows.push({
+        name: nome,
+        sigla: sigla && sigla !== "null" ? sigla : null,
+        category: fields[3]?.trim() || null,
+        organization_type: fields[7]?.trim() || null,
+        municipio: fields[9]?.trim() || null,
+        uf: fields[10]?.trim() || null,
+        is_active: fields[11]?.trim() === "Ativa",
+        source: "eMEC",
+      });
+    }
+
+    // Batch insert (500 por lote)
+    const batchSize = 500;
+    let inserted = 0;
+    for (let i = 0; i < rows.length; i += batchSize) {
+      const batch = rows.slice(i, i + batchSize);
+      const { error } = await supabase.from("institutions").insert(batch);
+      if (error) throw error;
+      inserted += batch.length;
+    }
+
+    return new Response(JSON.stringify({ success: true, inserted, total: rows.length }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (err: any) {
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});` },
+  { name: "send-reviewer-invite", code: `import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { Resend } from "npm:resend@2.0.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.3";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+const handler = async (req: Request): Promise<Response> => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) throw new Error("Missing authorization");
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+    const anonClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
+    const { data: { user }, error: authError } = await anonClient.auth.getUser();
+    if (authError || !user) throw new Error("Not authenticated");
+
+    const { inviteId, orgId, inviteCode } = await req.json();
+    if (!inviteId || !orgId) throw new Error("Missing inviteId or orgId");
+
+    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+    // Get invite with staging data
+    const { data: invite, error: invErr } = await adminClient
+      .from("reviewer_invites").select("*").eq("id", inviteId).eq("org_id", orgId).single();
+    if (invErr || !invite) throw new Error("Invite not found");
+
+    // Get org name
+    const { data: org } = await adminClient.from("organizations").select("name").eq("id", orgId).single();
+
+    // Generate token
+    const token = crypto.randomUUID() + "-" + crypto.randomUUID();
+    const tokenHash = await hashToken(token);
+
+    // Update invite with token
+    await adminClient.from("reviewer_invites").update({ token_hash: tokenHash }).eq("id", inviteId);
+
+    // If a custom invite code was provided, update it
+    if (inviteCode) {
+      await adminClient.from("reviewer_invites").update({ invite_code: inviteCode.toUpperCase().trim() }).eq("id", inviteId);
+    }
+
+    // Audit log
+    await adminClient.from("audit_logs").insert({
+      user_id: user.id, organization_id: orgId,
+      entity: "reviewer", entity_id: inviteId,
+      action: "REVIEWER_INVITE_SENT",
+      metadata_json: { email: invite.email },
+    });
+
+    // Send email via Resend
+    const fullName = invite.full_name || invite.email;
+    const appUrl = req.headers.get("origin") || "https://proponente-pro.lovable.app";
+    const inviteUrl = \`\${appUrl}/invite/reviewer?token=\${token}\`;
+    const activateUrl = \`\${appUrl}/reviewer/activate\`;
+    const codeDisplay = invite.invite_code || inviteCode || null;
+
+    const resendKey = Deno.env.get("RESEND_API_KEY");
+    if (resendKey) {
+      const resend = new Resend(resendKey);
+      await resend.emails.send({
+        from: "ProjetoGO <onboarding@resend.dev>",
+        to: [invite.email],
+        subject: \`Convite para Avaliador — \${org?.name || "ProjetoGO"}\`,
+        html: \`<!-- Template HTML com botão "Aceitar Convite" + código alfanumérico -->\`,
+      });
+    }
+
+    return new Response(JSON.stringify({ success: true, inviteUrl, inviteCode: codeDisplay }), {
+      status: 200, headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+  } catch (error: any) {
+    console.error("Error sending reviewer invite:", error);
+    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } });
+  }
+};
+
+async function hashToken(token: string): Promise<string> {
+  const data = new TextEncoder().encode(token);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+serve(handler);` },
+  { name: "send-submission-notification", code: `import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { Resend } from "npm:resend@2.0.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.3";
+
+const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+interface NotificationRequest {
+  submissionId: string;
+  protocol: string;
+  editalTitle: string;
+}
+
+const handler = async (req: Request): Promise<Response> => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) throw new Error("Missing authorization");
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) throw new Error("Not authenticated");
+
+    const { submissionId, protocol, editalTitle }: NotificationRequest = await req.json();
+    if (!submissionId || !protocol || !editalTitle) throw new Error("Missing required fields");
+
+    // Get user profile
+    const { data: profile } = await supabase.from("profiles")
+      .select("full_name, email").eq("user_id", user.id).maybeSingle();
+
+    const recipientEmail = profile?.email || user.email;
+    const recipientName = profile?.full_name || "Proponente";
+    if (!recipientEmail) throw new Error("No email found for user");
+
+    const appUrl = req.headers.get("origin") || "https://proponente-pro.lovable.app";
+
+    // Send email via Resend with styled HTML template
+    // Includes: protocol number, edital title, submission date, CTA button
+    await resend.emails.send({
+      from: "ProjetoGO <onboarding@resend.dev>",
+      to: [recipientEmail],
+      subject: \`Proposta submetida com sucesso — Protocolo \${protocol}\`,
+      html: \`<!-- Template HTML estilizado com protocolo, edital, data -->\`,
+    });
+
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200, headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+  } catch (error: any) {
+    console.error("Error sending notification:", error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500, headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+  }
+};
+
+serve(handler);` },
+  { name: "validate-reviewer-code", code: `import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.3";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+// Rate limiting: 5 tentativas por IP por minuto
+const attempts = new Map<string, { count: number; resetAt: number }>();
+function checkRateLimit(key: string): boolean {
+  const now = Date.now();
+  const entry = attempts.get(key);
+  if (!entry || now > entry.resetAt) { attempts.set(key, { count: 1, resetAt: now + 60_000 }); return true; }
+  entry.count++;
+  return entry.count <= 5;
+}
+
+const handler = async (req: Request): Promise<Response> => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  try {
+    const { invite_code } = await req.json();
+    if (!invite_code) throw new Error("Missing invite_code");
+
+    const clientIp = req.headers.get("x-forwarded-for") || "unknown";
+    if (!checkRateLimit(clientIp)) {
+      return new Response(JSON.stringify({ error: "Muitas tentativas. Aguarde 1 minuto." }), {
+        status: 429, headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    const code = invite_code.toUpperCase().trim();
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+    const { data: invite, error } = await adminClient
+      .from("reviewer_invites").select("*").eq("invite_code", code).is("used_at", null).single();
+
+    if (error || !invite) {
+      return new Response(JSON.stringify({ error: "Código não encontrado ou já utilizado." }), {
+        status: 200, headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+    if (new Date(invite.expires_at) < new Date()) {
+      return new Response(JSON.stringify({ error: "Este convite expirou." }), {
+        status: 200, headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    // Get org name
+    const { data: org } = await adminClient.from("organizations").select("name").eq("id", invite.org_id).single();
+
+    return new Response(JSON.stringify({
+      invite: { id: invite.id, expires_at: invite.expires_at, org_id: invite.org_id },
+      reviewer: { full_name: invite.full_name || null, email: invite.email, institution: invite.institution || null },
+      org_name: org?.name || "",
+    }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
+  } catch (error: any) {
+    console.error("Error validating code:", error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500, headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+  }
+};
+
+serve(handler);` },
+  { name: "validate-reviewer-invite", code: `import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.3";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+const handler = async (req: Request): Promise<Response> => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  try {
+    const { token } = await req.json();
+    if (!token) throw new Error("Missing token");
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+    const tokenHash = await hashToken(token);
+
+    const { data: invite, error } = await adminClient
+      .from("reviewer_invites").select("*").eq("token_hash", tokenHash).is("used_at", null).single();
+
+    if (error || !invite) {
+      return new Response(JSON.stringify({ error: "Convite não encontrado ou já utilizado." }), {
+        status: 200, headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+    if (new Date(invite.expires_at) < new Date()) {
+      return new Response(JSON.stringify({ error: "Este convite expirou." }), {
+        status: 200, headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    return new Response(JSON.stringify({
+      invite: { id: invite.id, expires_at: invite.expires_at },
+      reviewer: { full_name: invite.full_name || null, email: invite.email, institution: invite.institution || null },
+    }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
+  } catch (error: any) {
+    console.error("Error validating invite:", error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500, headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+  }
+};
+
+async function hashToken(token: string): Promise<string> {
+  const data = new TextEncoder().encode(token);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+serve(handler);` },
 ];
 
 /* ────────── COMPONENTS ────────── */
@@ -1401,6 +2249,7 @@ export default function SchemaDoc() {
   const [selectedFn, setSelectedFn] = useState<string>(DB_FUNCTIONS[0].name);
   const [selectedEdge, setSelectedEdge] = useState<string>(EDGE_FUNCTIONS[0].name);
   const [selectedEnum, setSelectedEnum] = useState<string>(ENUMS[0]?.name ?? "");
+  const [selectedView, setSelectedView] = useState<string>(VIEWS[0]?.name ?? "");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expandedSections, setExpandedSections] = useState<Record<SectionType, boolean>>({
     tables: true, enums: false, functions: false, views: false, edge_functions: false,
@@ -1471,7 +2320,10 @@ export default function SchemaDoc() {
                         </button>
                       ))}
                       {key === "views" && VIEWS.map(v => (
-                        <div key={v.name} className="text-xs px-3 py-1.5 text-muted-foreground">{v.name}</div>
+                        <button key={v.name} onClick={() => { setSection("views"); setSelectedView(v.name); }}
+                          className={`w-full text-left text-xs px-3 py-1.5 rounded transition-colors truncate ${selectedView === v.name && section === "views" ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted text-muted-foreground"}`}>
+                          {v.name}
+                        </button>
                       ))}
                     </div>
                   )}
@@ -1492,7 +2344,7 @@ export default function SchemaDoc() {
             {section === "tables" && `Tabela: ${selectedTable}`}
             {section === "enums" && `Enum: ${selectedEnum}`}
             {section === "functions" && `Função: ${selectedFn}`}
-            {section === "views" && "Views"}
+            {section === "views" && `View: ${selectedView}`}
             {section === "edge_functions" && `Edge Function: ${selectedEdge}`}
           </h2>
         </div>
@@ -1532,29 +2384,26 @@ export default function SchemaDoc() {
             </div>
           )}
 
-          {section === "views" && (
-            <div className="space-y-6">
-              <h2 className="text-xl font-bold font-heading flex items-center gap-2">
-                <Eye className="h-5 w-5 text-primary" /> Views
-              </h2>
-              {VIEWS.map(v => (
-                <div key={v.name}>
-                  <CodeBlock code={`CREATE OR REPLACE VIEW public.${v.name} AS\n${v.definition}`} label={v.name} />
-                </div>
-              ))}
-            </div>
-          )}
+          {section === "views" && (() => {
+            const view = VIEWS.find(v => v.name === selectedView);
+            if (!view) return null;
+            return (
+              <div className="space-y-4">
+                <h2 className="text-xl font-bold font-heading flex items-center gap-2">
+                  <Eye className="h-5 w-5 text-primary" /> {view.name}
+                </h2>
+                <CodeBlock code={`CREATE OR REPLACE VIEW public.${view.name} AS\n${view.definition}`} />
+              </div>
+            );
+          })()}
 
           {section === "edge_functions" && (
             <div className="space-y-4">
               <h2 className="text-xl font-bold font-heading flex items-center gap-2">
                 <Zap className="h-5 w-5 text-primary" /> {selectedEdge}
               </h2>
-              <div className="bg-muted/30 border rounded-lg p-4">
-                <p className="text-sm font-mono text-muted-foreground mb-2">supabase/functions/{selectedEdge}/index.ts</p>
-                <p className="text-sm">{EDGE_FUNCTIONS.find(e => e.name === selectedEdge)!.code}</p>
-              </div>
-              <p className="text-xs text-muted-foreground">O código-fonte completo está em <code className="bg-muted px-1 py-0.5 rounded">supabase/functions/{selectedEdge}/index.ts</code></p>
+              <p className="text-xs text-muted-foreground font-mono">supabase/functions/{selectedEdge}/index.ts</p>
+              <CodeBlock code={EDGE_FUNCTIONS.find(e => e.name === selectedEdge)!.code} />
             </div>
           )}
         </div>
